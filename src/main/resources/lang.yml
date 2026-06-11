@@ -1,0 +1,85 @@
+# ============================================
+# AL-RecipeViewer 语言文件
+# 插件运行时实际读取的文本集中在这里
+# 菜单按钮文字请在 menu.yml 中修改
+# ============================================
+
+# 聊天消息前缀
+plugin-prefix: "&8[&6ALCE合成表&8]&r"
+
+# 配方类型显示名称（用于配方列表物品的 lore）
+recipe-types:
+  crafting: "工作台"
+  shaped: "有序合成"
+  shapeless: "无序合成"
+  smelting: "熔炉烧炼"
+  blasting: "高炉烧炼"
+  smoking: "烟熏炉"
+  campfire_cooking: "营火烹饪"
+  stonecutting: "切石机"
+  smithing: "锻造台"
+  smithing_transform: "锻造台"
+  smithing_trim: "锻造纹饰"
+  brewing: "酿造台"
+
+# CE 物品的自定义中文名（用于排序和搜索，不覆盖客户端 item_name 显示）
+custom-names: {}
+
+# 配方列表底部栏的固定文字
+recipe-lore:
+  result: "&7产出: &f{count}个"
+  type: "&7类型: &f{type}"
+  click: "&e▶ 点击查看合成表"
+
+# 分类默认显示名称
+# 用于配方列表标题，若 lang.yml 未配置则回退到 CEBridge 内置名称
+default-categories:
+  crafting: "工作台配方"
+  smelting: "熔炉烧炼"
+  blasting: "高炉烧炼"
+  smoking: "烟熏炉"
+  campfire_cooking: "营火烹饪"
+  stonecutting: "切石机"
+  smithing: "锻造台"
+  brewing: "酿造台"
+
+# 搜索结果追加到标题的后缀
+search-title-suffix: " | \"{query}\""
+
+# 新增配方消息
+creator:
+  no-items: "&c请至少放入原料和结果物品！未保存。"
+  no-ingredient: "&c请放入烧炼原料！"
+  no-ce-dir: "&c未找到 CraftEngine 配置目录！"
+  saved: "&a配方已保存至: {path}"
+  reload-hint-1: "&e请在控制台输入: &fce reload all"
+  reload-hint-2: "&e然后输入: &f/alcerecipes clear && /alcerecipes reload"
+  admin-only: "&c只有管理员可以创建配方！"
+  cleared: "&a配方缓存已清空，请使用 /alcerecipes reload 重新加载。"
+  help-clear: "&e  /alcerecipes clear &7- 清空配方缓存（配合 reload 重新加载）"
+
+# 聊天消息
+chat:
+  search-prompt: "{prefix} &e请在聊天栏输入搜索词（输入 &ccancel &e取消）"
+  search-cancelled: "{prefix} &7搜索已取消。"
+  search-result: "{prefix} &a找到 &f{count} &a个匹配配方。"
+
+# 命令消息
+command:
+  player-only: "&c此命令只能由玩家执行。"
+  no-recipes: "&c暂无配方数据，请等待加载或使用 /alcerecipes reload"
+  no-permission: "&c你没有权限重载配方。"
+  reloaded: "&a配方数据已重新加载！共 {count} 个配方。"
+  usage-title: "&e用法:"
+  usage-open: "&e  /alcerecipes &7- 打开合成表分类浏览"
+  usage-reload: "&e  /alcerecipes reload &7- 重新加载配方数据"
+
+# 配方详情 GUI 标题（原版工作方块）
+detail-titles:
+  crafting: "&8工作台配方"
+  smithing: "&8锻造台配方"
+  furnace: "&8熔炉烧炼"
+  blasting: "&8高炉烧炼"
+  smoking: "&8烟熏炉"
+  stonecutting: "&8切石机配方"
+  brewing: "&8酿造台配方"
