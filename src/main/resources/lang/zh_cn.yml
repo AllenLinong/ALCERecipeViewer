@@ -1,0 +1,178 @@
+# ============================================
+# AL-RecipeViewer 语言文件
+# 插件运行时实际读取的文本集中在这里
+# 菜单按钮文字请在 menu.yml 中修改
+# ============================================
+
+# 聊天消息前缀
+plugin-prefix: "&8[&6ALCE合成表&8]&r"
+
+# 配方类型显示名称（用于配方列表物品的 lore）
+recipe-types:
+  crafting: "工作台"
+  shaped: "有序合成"
+  shapeless: "无序合成"
+  smelting: "熔炉烧炼"
+  blasting: "高炉烧炼"
+  smoking: "烟熏炉"
+  campfire_cooking: "营火烹饪"
+  stonecutting: "切石机"
+  smithing: "锻造台"
+  smithing_transform: "锻造台"
+  smithing_trim: "锻造纹饰"
+  brewing: "酿造台"
+
+# CE 物品的自定义中文名（用于排序和搜索，不覆盖客户端 item_name 显示）
+custom-names: {}
+
+# 配方列表底部栏的固定文字
+recipe-lore:
+  result: "&7产出: &f{count}个"
+  type: "&7类型: &f{type}"
+  click: "&e▶ 点击查看合成表"
+
+# 分类默认显示名称
+# 用于配方列表标题，若 lang.yml 未配置则回退到 CEBridge 内置名称
+default-categories:
+  crafting: "工作台配方"
+  smelting: "熔炉烧炼"
+  blasting: "高炉烧炼"
+  smoking: "烟熏炉"
+  campfire_cooking: "营火烹饪"
+  stonecutting: "切石机"
+  smithing: "锻造台"
+  brewing: "酿造台"
+
+# 搜索结果追加到标题的后缀
+search-title-suffix: " | \"{query}\""
+
+# 新增配方消息
+creator:
+  no-items: "&c请至少放入原料和结果物品！未保存。"
+  no-ingredient: "&c请放入烧炼原料！"
+  no-ce-dir: "&c未找到 CraftEngine 配置目录！"
+  saved: "&a配方已保存至: {path}"
+  reload-hint-1: "&e请在控制台输入: &fce reload all"
+  reload-hint-2: "&e然后输入: &f/alcerecipes clear && /alcerecipes reload"
+  admin-only: "&c只有管理员可以创建配方！"
+  cleared: "&a配方缓存已清空，请使用 /alcerecipes reload 重新加载。"
+  help-clear: "&e  /alcerecipes clear &7- 清空配方缓存（配合 reload 重新加载）"
+
+# 聊天消息
+chat:
+  search-prompt: "{prefix} &e请在聊天栏输入搜索词（输入 &ccancel &e取消）"
+  search-cancelled: "{prefix} &7搜索已取消。"
+  search-result: "{prefix} &a找到 &f{count} &a个匹配配方。"
+
+# 命令消息
+command:
+  player-only: "&c此命令只能由玩家执行。"
+  no-recipes: "&c暂无配方数据，请等待加载或使用 /alcerecipes reload"
+  no-permission: "&c你没有权限重载配方。"
+  reloaded: "&a配方数据已重新加载！共 {count} 个配方。"
+  usage-title: "&e用法:"
+  usage-open: "&e  /alcerecipes &7- 打开合成表分类浏览"
+  usage-reload: "&e  /alcerecipes reload &7- 重新加载配方数据"
+
+# 配方详情 GUI 标题（原版工作方块）
+detail-titles:
+  crafting: "&8工作台配方"
+  smithing: "&8锻造台配方"
+  furnace: "&8熔炉烧炼"
+  blasting: "&8高炉烧炼"
+  smoking: "&8烟熏炉"
+  stonecutting: "&8切石机配方"
+  brewing: "&8酿造台配方"
+
+# 菜单文字（menu.yml 通过 {@key} 引用）
+menu:
+  category_crafting: "&6&l工作台配方"
+  category_crafting_desc: "&7有序合成 / 无序合成"
+  category_smelting: "&6&l熔炉烧炼"
+  category_smelting_desc: "&7使用熔炉烧炼物品"
+  category_blasting: "&6&l高炉烧炼"
+  category_blasting_desc: "&7使用高炉快速烧炼"
+  category_smoking: "&6&l烟熏炉"
+  category_smoking_desc: "&7使用烟熏炉烹饪食物"
+  category_campfire: "&6&l营火烹饪"
+  category_campfire_desc: "&7使用营火烹饪食物"
+  category_stonecutting: "&6&l切石机"
+  category_stonecutting_desc: "&7使用切石机加工石料"
+  category_smithing: "&6&l锻造台"
+  category_smithing_desc: "&7锻造变换 / 锻造纹饰"
+  category_brewing: "&6&l酿造台"
+  category_brewing_desc: "&7使用酿造台制作药水"
+  recipe_count: "&7共有 &f{count} &7个配方"
+  click_browse: "&e▶ 点击浏览"
+  prev_page: "&a&l◀ 上一页"
+  next_page: "&a&l下一页 ▶"
+  search: "&e&l🔍 搜索"
+  search_clear: "&cShift+点击清空"
+  back_to_main: "&c&l↩ 返回分类"
+  back: "&c&l↩ 返回列表"
+  close: "&c&l✘ 关闭"
+  main_title: "&8ALCE合成表 - 分类浏览"
+  background: " "
+  # 详情标题
+  detail_crafting_title: "&8工作台配方"
+  detail_furnace_title: "&8熔炉配方"
+  detail_smithing_title: "&8锻造台配方"
+  detail_stonecutter_title: "&8切石机配方"
+  detail_brewing_title: "&8酿造台配方"
+  # 列表
+  search_current: "&7当前搜索: &f{query}"
+  search_left: "&7▶ 左键：输入名称搜索"
+  search_shift: "&7▶ Shift+左键：清空搜索"
+  # 熔炉/酿造详情
+  furnace_flame: "&c&l火焰"
+  furnace_fuel_time: "&7燃烧时间: {fuel_time}"
+  furnace_fuel_exp: "&7获得经验: {fuel_exp}"
+  brewing_blaze: "&6&l烈焰粉"
+  brewing_fuel_desc: "&7燃烧时间: 配方决定"
+  # 新增配方
+  creator_type_title: "&8选择配方类型"
+  creator_shaped: "&6&l有序合成"
+  creator_shaped_desc: "&73x3工作台 - 固定摆放"
+  creator_shapeless: "&e&l无序合成"
+  creator_shapeless_desc: "&73x3工作台 - 任意摆放"
+  creator_furnace: "&c&l熔炉/高炉烧炼"
+  creator_furnace_desc: "&7熔炉/高炉配方"
+  creator_smithing: "&b&l锻造台"
+  creator_smithing_desc: "&7锻造变换配方"
+  creator_stonecutter: "&7&l切石机"
+  creator_stonecutter_desc: "&7切石机配方"
+  creator_brewing: "&5&l酿造台"
+  creator_brewing_desc: "&7酿造配方"
+  creator_campfire: "&6&l营火烹饪"
+  creator_campfire_desc: "&7营火配方"
+  creator_smoking: "&8&l烟熏炉"
+  creator_smoking_desc: "&7烟熏炉配方"
+  creator_shaped_title: "&8新增有序合成配方"
+  creator_shapeless_title: "&8新增无序合成配方"
+  creator_furnace_title: "&8新增烧炼配方"
+  creator_smoking_title: "&8新增烟熏炉配方"
+  creator_campfire_title: "&8新增营火配方"
+  creator_stonecutter_title: "&8新增切石机配方"
+  creator_smithing_title: "&8新增锻造配方 - 模板 装备 材料 结果"
+  creator_brewing_title: "&8新增酿造配方"
+  creator_save: "&a保存并返回"
+  creator_back: "&c返回"
+  furnace_mode: "&e&l烧炼模式: &f{mode}"
+  furnace_mode_left: "&7左键: 仅高炉"
+  furnace_mode_right: "&7右键: 仅熔炉"
+  furnace_mode_shift: "&7Shift+左键: 熔炉+高炉"
+  furnace_time: "&e&l烧炼时间: &f{time}秒"
+  furnace_time_lore: "&7左键+1秒 右键-1秒"
+  furnace_time_mode: "&7当前模式：&f{mode}"
+  furnace_time_hint: "&7仅&6熔炉+高炉&7模式高炉时间自动=熔炉÷2"
+  furnace_exp: "&a&l获得经验: &f{exp}"
+  furnace_exp_lore: "&7左键+0.1  &7右键-0.1"
+  furnace_exp_shift: "&7Shift+左键 输入数值"
+  smoking_time: "&8&l烟熏时间: &f{time}秒"
+  smoking_time_lore: "&7左键+1秒 右键-1秒"
+  campfire_time: "&6&l营火时间: &f{time}秒"
+  campfire_time_lore: "&7左键+1秒 右键-1秒"
+  campfire_time_default: "&7营火默认30秒"
+  page_indicator: "&7第 {page} 页"
+  back_to_main_desc: "&7点击返回分类浏览"
+  creator_exp: "&a&l经验: &f{exp}"
