@@ -99,6 +99,10 @@ public class RecipeGUI {
     // ===================== 配方列表 =====================
 
     public void openRecipeList(Player player, String categoryId, int page) {
+        if (categoryId == null) {
+            openMainMenu(player);
+            return;
+        }
         MenuDef menu = menuConfig.getRecipeList();
         if (menu == null) return;
 

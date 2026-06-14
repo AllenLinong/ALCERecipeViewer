@@ -84,24 +84,26 @@ public class GUIListener implements Listener {
             return;
         }
         if ("creator_type".equals(guiType)) {
+            int raw = event.getRawSlot();
+            int topSize = event.getView().getTopInventory().getSize();
+            if (raw >= topSize) return; // 玩家背包 → 放行
+            if (raw < 0) return;
             event.setCancelled(true);
-            if (event.getSlot() >= 0) {
-                MenuDef menu = plugin.getMenuConfig().getRecipeCreatorType();
-                if (menu != null) {
-                    ButtonDef btn = MenuConfig.buttonAt(menu, event.getSlot());
-                    if (btn != null) handleCreatorAction(player, event, btn);
-                }
+            MenuDef menu = plugin.getMenuConfig().getRecipeCreatorType();
+            if (menu != null) {
+                ButtonDef btn = MenuConfig.buttonAt(menu, raw);
+                if (btn != null) handleCreatorAction(player, event, btn);
             }
             return;
         }
 
-        // 主菜单/配方列表：参照 Paper 框架，只拦截 top inventory，放行背包
+        // 主菜单/配方列表：拦截所有点击，防止物品进出 GUI
+        event.setCancelled(true);
         int raw = event.getRawSlot();
         int topSize = event.getView().getTopInventory().getSize();
-        if (raw >= topSize) return; // 玩家背包 → 放行
+        if (raw >= topSize || raw < 0) return; // 玩家背包 → 不处理按钮逻辑
 
         if (event.getCurrentItem() == null || event.getCurrentItem().getType() == Material.AIR) return;
-        event.setCancelled(true);
 
         int slot = event.getSlot();
         MenuDef menu = gui.getPlayerMenuDef(player.getUniqueId());
