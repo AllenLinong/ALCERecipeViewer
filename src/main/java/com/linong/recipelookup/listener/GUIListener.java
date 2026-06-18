@@ -53,10 +53,17 @@ public class GUIListener implements Listener {
                 MenuDef detailMenu = gui.getPlayerMenuDef(player.getUniqueId());
                 if (detailMenu != null) {
                     ButtonDef btn = MenuConfig.buttonAt(detailMenu, slot);
-                    if (btn != null && "BACK".equals(btn.action())) {
-                        String cat = gui.getPlayerCategory(player.getUniqueId());
-                        int page = gui.getPlayerPage(player.getUniqueId());
-                        if (cat != null) gui.openRecipeList(player, cat, page);
+                    if (btn != null) {
+                        switch (btn.action()) {
+                            case "BACK" -> {
+                                gui.stopRecipeCycle(player);
+                                String cat = gui.getPlayerCategory(player.getUniqueId());
+                                int page = gui.getPlayerPage(player.getUniqueId());
+                                if (cat != null) gui.openRecipeList(player, cat, page);
+                            }
+                            case "PREV_RECIPE" -> gui.navigateRecipe(player, -1);
+                            case "NEXT_RECIPE" -> gui.navigateRecipe(player, 1);
+                        }
                     }
                 }
             }
@@ -184,6 +191,7 @@ public class GUIListener implements Listener {
 
         String type = gui.getGUIType(player.getUniqueId());
         if (RecipeGUI.TYPE_DETAIL.equals(type)) {
+            gui.stopRecipeCycle(player);
             String cat = gui.getPlayerCategory(player.getUniqueId());
             int page = gui.getPlayerPage(player.getUniqueId());
             if (cat != null) {

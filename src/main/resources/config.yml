@@ -10,3 +10,5 @@ language: zh_cn
 features:
   # 调试模式：点击配方物品时在聊天栏显示名称解析信息
   debug: false
+  # 多配方轮播间隔（秒）：同一物品有多个合成配方时，详情页每隔此秒数自动切换
+  multi-recipe-cycle-seconds: 10

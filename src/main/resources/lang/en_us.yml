@@ -24,6 +24,8 @@ recipe-lore:
   result: "&7Output: &f{count}x"
   type: "&7Type: &f{type}"
   click: "&e▶ Click to view recipe"
+  multi-recipes: "&d◆ {count} crafting methods"
+  cycle-indicator: "&7Recipe {current}/{total} &8| &7Switching in {interval}s"
 
 default-categories:
   crafting: "Crafting Recipes"
@@ -96,6 +98,8 @@ menu:
   search_clear: "&cShift+Click to clear"
   back_to_main: "&c&l↩ Back to Categories"
   back: "&c&l↩ Back to List"
+  prev_recipe: "&a&l◀ Prev Recipe"
+  next_recipe: "&a&lNext Recipe ▶"
   close: "&c&l✘ Close"
   main_title: "&8ALCERecipe - Recipe Browser"
   background: " "

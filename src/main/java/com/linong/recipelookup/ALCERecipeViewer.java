@@ -74,9 +74,9 @@ public final class ALCERecipeViewer extends JavaPlugin {
         getLogger().info("");
         getLogger().info("════════════════════════════════════════════════════");
         getLogger().info("");
-        getLogger().info("  §a✓ §r语言设置 » " + configManager.getLanguage());
-        getLogger().info("  " + (ceBridge.isAvailable() ? "§a✓ CraftEngine » 已连接" : "§c✗ CraftEngine » 未检测到"));
-        getLogger().info("  §a✓ §r菜单系统 » 已加载");
+        getLogger().info("  [OK] 语言设置 » " + configManager.getLanguage());
+        getLogger().info("  " + (ceBridge.isAvailable() ? "[OK] CraftEngine » 已连接" : "[!!] CraftEngine » 未检测到"));
+        getLogger().info("  [OK] 菜单系统 » 已加载");
         getLogger().info("");
 
         if (ceBridge.isAvailable()) {
@@ -99,7 +99,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
         Map<String, List<CEBridge.RecipeData>> cached = loadRecipeCache();
         if (!cached.isEmpty()) {
             this.loadedRecipes = cached;
-            getLogger().info("  §a✓ §r配方缓存 » " + cached.values().stream().mapToInt(List::size).sum() + " 个");
+            getLogger().info("  [OK] 配方缓存 » " + cached.values().stream().mapToInt(List::size).sum() + " 个");
             return;
         }
         this.loadedRecipes = ceBridge.loadAllRecipes();
@@ -122,7 +122,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
                     for (String ing : r.ingredientIds) recipeGUI.toChineseName(ing, locale);
                 }
             }
-            getLogger().info("  §a✓ §r名字预热 » 完成");
+            getLogger().info("  [OK] 名字预热 » 完成");
         }
     }
 
@@ -227,7 +227,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
             try { yaml.save(f); } catch (Exception ignored) {}
         }
         int total = recipes.values().stream().mapToInt(List::size).sum();
-        getLogger().info("  §a✓ §r配方缓存 » 已保存 " + total + " 个");
+        getLogger().info("  [OK] 配方缓存 » 已保存 " + total + " 个");
     }
 
     /** 带重试的延迟加载（CE 配方可能晚于本插件加载） */
@@ -236,13 +236,13 @@ public final class ALCERecipeViewer extends JavaPlugin {
             loadRecipesInitial();
             int total = loadedRecipes.values().stream().mapToInt(List::size).sum();
             if (total == 0 && delayTicks < 400) {
-                getLogger().info("  §7配方数据暂未就绪，" + ((delayTicks + 60) / 20) + "s 后重试...");
+                getLogger().info("  配方数据暂未就绪，" + ((delayTicks + 60) / 20) + "s 后重试...");
                 scheduleRecipeLoad(delayTicks + 60);
             } else {
                 getLogger().info("");
                 getLogger().info("════════════════════════════════════════════════════");
                 getLogger().info("");
-                getLogger().info("  §a✓ §r配方加载 » " + total + " 个 | /alcerecipes 打开");
+                getLogger().info("  [OK] 配方加载 » " + total + " 个 | /alcerecipes 打开");
                 getLogger().info("");
             }
         }, delayTicks);

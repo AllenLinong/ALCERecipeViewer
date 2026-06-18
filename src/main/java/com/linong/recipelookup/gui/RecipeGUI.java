@@ -6,6 +6,7 @@ import com.linong.recipelookup.MenuConfig;
 import com.linong.recipelookup.MenuConfig.ButtonDef;
 import com.linong.recipelookup.MenuConfig.MenuDef;
 import com.linong.recipelookup.bridge.CEBridge;
+import com.tcoded.folialib.wrapper.task.WrappedTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -40,6 +41,14 @@ public class RecipeGUI {
     private final Map<UUID, MenuDef> playerMenuDef = new HashMap<>();
     /** 缓存排序后的配方列表，避免点击时重复排序 */
     private final Map<UUID, List<CEBridge.RecipeData>> playerRecipes = new HashMap<>();
+    /** 多配方轮播：resultId → 该结果物品的所有配方 */
+    private final Map<String, List<CEBridge.RecipeData>> resultRecipeGroups = new HashMap<>();
+    /** 多配方轮播：玩家当前查看的配方组 */
+    private final Map<UUID, List<CEBridge.RecipeData>> playerRecipeGroup = new HashMap<>();
+    /** 多配方轮播：玩家当前配方组中的索引 */
+    private final Map<UUID, Integer> playerRecipeIndex = new HashMap<>();
+    /** 多配方轮播：已调度的轮播任务（可取消） */
+    private final Map<UUID, WrappedTask> playerCycleTask = new HashMap<>();
 
     public RecipeGUI(ALCERecipeViewer plugin) {
         this.plugin = plugin;
@@ -141,7 +150,10 @@ public class RecipeGUI {
 
                 if (c == 'I') {
                     if (recipeIdx < recipes.size()) {
-                        inv.setItem(slot, createRecipeEntryIcon(recipes.get(recipeIdx)));
+                        CEBridge.RecipeData rec = recipes.get(recipeIdx);
+                        List<CEBridge.RecipeData> group = resultRecipeGroups.get(rec.resultId);
+                        int multiCount = group != null ? group.size() : 1;
+                        inv.setItem(slot, createRecipeEntryIcon(rec, multiCount));
                         recipeIdx++;
                     }
                 } else if (c == '#') {
@@ -173,17 +185,31 @@ public class RecipeGUI {
         openRecipeList(player, categoryId, 0);
     }
 
-    /** 获取排序后的配方列表（O(N) 预计算名字，避免 O(N log N) 次比较器调用） */
+    /** 获取排序后的配方列表（去重：同一结果物品只显示一条，多配方时显示合并提示） */
     public List<CEBridge.RecipeData> getSortedRecipes(String categoryId, String filter, Locale locale) {
         List<CEBridge.RecipeData> all = plugin.getLoadedRecipes().getOrDefault(categoryId, List.of());
         List<CEBridge.RecipeData> recipes = new ArrayList<>(
                 (filter != null) ? filterRecipes(all, filter, locale) : all);
-        Map<CEBridge.RecipeData, String> nameMap = new HashMap<>();
+        // 按 resultId 分组，记录多配方组
+        Map<String, List<CEBridge.RecipeData>> groups = new LinkedHashMap<>();
         for (CEBridge.RecipeData r : recipes) {
+            groups.computeIfAbsent(r.resultId, k -> new ArrayList<>()).add(r);
+        }
+        // 缓存当前分类的配方组（用于后续详情页轮播）
+        resultRecipeGroups.clear();
+        resultRecipeGroups.putAll(groups);
+        // 去重：每个 resultId 只保留一项
+        List<CEBridge.RecipeData> deduped = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (CEBridge.RecipeData r : recipes) {
+            if (seen.add(r.resultId)) deduped.add(r);
+        }
+        Map<CEBridge.RecipeData, String> nameMap = new HashMap<>();
+        for (CEBridge.RecipeData r : deduped) {
             nameMap.put(r, toChineseName(r.resultId, locale));
         }
-        recipes.sort(Comparator.comparing(nameMap::get, CN_COLLATOR));
-        return recipes;
+        deduped.sort(Comparator.comparing(nameMap::get, CN_COLLATOR));
+        return deduped;
     }
 
     public void clearSearch(Player player) {
@@ -811,26 +837,47 @@ public class RecipeGUI {
     // ===================== 配方详情 =====================
 
     public void openRecipeDetail(Player player, CEBridge.RecipeData recipe, String categoryId, int listPage) {
-        Inventory inv;
-        MenuDef menu = null;
-        switch (recipe.type) {
-            case "crafting" -> { inv = createCraftingTableGUI(recipe); menu = menuConfig.getDetailCrafting(); }
-            case "smithing"  -> { inv = createSmithingTableGUI(recipe); menu = menuConfig.getDetailSmithing(); }
-            case "smelting", "blasting", "smoking", "campfire_cooking" -> {
-                inv = createFurnaceGUI(recipe); menu = menuConfig.getDetailFurnace();
-            }
-            case "stonecutting" -> { inv = createStonecutterGUI(recipe); menu = menuConfig.getDetailStonecutter(); }
-            case "brewing" -> { inv = createBrewingGUI(recipe); menu = menuConfig.getDetailBrewing(); }
-            default -> { inv = createCraftingTableGUI(recipe); menu = menuConfig.getDetailCrafting(); }
-        }
-
         UUID uuid = player.getUniqueId();
-        player.openInventory(inv);
+
+        // 停止之前可能存在的轮播任务
+        stopRecipeCycle(player);
+
+        // 计算该结果物品在当前分类下的所有配方（多配方组）
+        List<CEBridge.RecipeData> allInCategory = plugin.getLoadedRecipes().getOrDefault(categoryId, List.of());
+        List<CEBridge.RecipeData> group = new ArrayList<>();
+        for (CEBridge.RecipeData r : allInCategory) {
+            // 防御性 null 检查：某些配方可能缺少 resultId
+            if (r.resultId != null && r.resultId.equals(recipe.resultId)) {
+                group.add(r);
+            }
+        }
+        if (group.isEmpty()) {
+            group.add(recipe); // 兜底：至少包含当前配方
+        }
+        int index = group.indexOf(recipe);
+        if (index < 0) index = 0;
+
+        playerRecipeGroup.put(uuid, group);
+        playerRecipeIndex.put(uuid, index);
+
+        // 构建并打开详情 GUI
+        Inventory inv = buildDetailInventory(recipe, group, index);
+        MenuDef menu = getDetailMenu(recipe.type);
+
+        // 必须在 openInventory 之前更新状态，否则关闭事件处理器
+        // 会触发 removePlayer() 清空所有状态
         guiType.put(uuid, TYPE_DETAIL);
         playerCategory.put(uuid, categoryId);
         playerPage.put(uuid, listPage);
         playerMenuDef.put(uuid, menu);
         openInventories.put(uuid, inv);
+
+        player.openInventory(inv);
+
+        // 多配方时启动自动轮播
+        if (group.size() > 1) {
+            scheduleRecipeCycle(player, config.getMultiRecipeCycleSeconds());
+        }
     }
 
     private Inventory createCraftingTableGUI(CEBridge.RecipeData recipe) {
@@ -960,6 +1007,151 @@ public class RecipeGUI {
         return inv;
     }
 
+    // ===================== 多配方轮播 =====================
+
+    /** 根据配方类型获取对应的详情菜单定义 */
+    private MenuDef getDetailMenu(String type) {
+        return switch (type) {
+            case "smithing" -> menuConfig.getDetailSmithing();
+            case "smelting", "blasting", "smoking", "campfire_cooking" -> menuConfig.getDetailFurnace();
+            case "stonecutting" -> menuConfig.getDetailStonecutter();
+            case "brewing" -> menuConfig.getDetailBrewing();
+            default -> menuConfig.getDetailCrafting();
+        };
+    }
+
+    /** 构建详情 GUI（含导航按钮） */
+    private Inventory buildDetailInventory(CEBridge.RecipeData recipe, List<CEBridge.RecipeData> group, int index) {
+        Inventory inv;
+        MenuDef menu = getDetailMenu(recipe.type);
+        switch (recipe.type) {
+            case "crafting" -> inv = createCraftingTableGUI(recipe);
+            case "smithing"  -> inv = createSmithingTableGUI(recipe);
+            case "smelting", "blasting", "smoking", "campfire_cooking" -> inv = createFurnaceGUI(recipe);
+            case "stonecutting" -> inv = createStonecutterGUI(recipe);
+            case "brewing" -> inv = createBrewingGUI(recipe);
+            default -> inv = createCraftingTableGUI(recipe);
+        }
+
+        // 设置导航按钮（上一个/下一个配方）
+        boolean multi = group.size() > 1;
+        setNavButton(inv, menu, 'L', multi && index > 0);
+        setNavButton(inv, menu, 'N', multi && index < group.size() - 1);
+
+        // 更新标题显示配方序号
+        if (multi) {
+            String title = menu.title() + " §8(" + (index + 1) + "/" + group.size() + ")";
+            // 通过反射或重建 inventory 来更新标题...实际上 Bukkit 不支持直接改标题
+            // 这里我们重新构建一个带新标题的 inventory
+            Inventory newInv = Bukkit.createInventory(null, inv.getSize(), title);
+            newInv.setContents(inv.getContents());
+            return newInv;
+        }
+        return inv;
+    }
+
+    /** 设置导航按钮：有下一页/上一页时显示箭头，否则显示背景玻璃 */
+    private void setNavButton(Inventory inv, MenuDef menu, char slotChar, boolean visible) {
+        List<Integer> slots = charSlots(menu.shape(), slotChar);
+        if (slots.isEmpty()) return;
+        if (visible) {
+            ButtonDef btn = menu.buttons().get(slotChar);
+            if (btn != null) inv.setItem(slots.get(0), buildButtonOrCE(btn, null));
+        } else {
+            // 没有更多配方 → 显示 # 背景
+            ButtonDef bg = menu.buttons().get('#');
+            if (bg != null) inv.setItem(slots.get(0), buildButtonOrCE(bg, null));
+        }
+    }
+
+    /** 刷新当前详情 GUI（切换配方后调用） */
+    private void refreshDetailGUI(Player player) {
+        UUID uuid = player.getUniqueId();
+        List<CEBridge.RecipeData> group = playerRecipeGroup.get(uuid);
+        Integer index = playerRecipeIndex.get(uuid);
+        if (group == null || index == null || index < 0 || index >= group.size()) return;
+
+        CEBridge.RecipeData recipe = group.get(index);
+        Inventory inv = buildDetailInventory(recipe, group, index);
+        MenuDef menu = getDetailMenu(recipe.type);
+
+        // 必须在 openInventory 之前更新状态，否则关闭事件处理器
+        // 会误判旧物品栏仍属于本插件，从而调度 openRecipeList 覆盖详情页
+        openInventories.put(uuid, inv);
+        playerMenuDef.put(uuid, menu);
+
+        player.openInventory(inv);
+    }
+
+    /** 手动切换配方（direction: -1 上一页, +1 下一页） */
+    public void navigateRecipe(Player player, int direction) {
+        UUID uuid = player.getUniqueId();
+        if (!TYPE_DETAIL.equals(guiType.getOrDefault(uuid, ""))) return;
+
+        List<CEBridge.RecipeData> group = playerRecipeGroup.get(uuid);
+        Integer index = playerRecipeIndex.get(uuid);
+        if (group == null || index == null || group.isEmpty()) return;
+
+        int newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= group.size()) return; // 边界检查
+
+        playerRecipeIndex.put(uuid, newIndex);
+        refreshDetailGUI(player);
+
+        // 手动操作后重新计时（scheduleRecipeCycle 内部会先取消旧任务）
+        scheduleRecipeCycle(player, 5);
+    }
+
+    /** 调度自动轮播任务 — 参照翻页按钮的简单逻辑：到时间就切下一个配方 */
+    private void scheduleRecipeCycle(Player player, int delaySeconds) {
+        UUID uuid = player.getUniqueId();
+
+        // 先取消旧的轮播任务
+        stopRecipeCycle(player);
+
+        // runLater(Runnable, ticks) → 主线程延迟执行，返回可取消的 WrappedTask
+        WrappedTask task = plugin.getFoliaLib().getScheduler().runLater(() -> {
+            // 已离开详情页 → 不再轮播
+            if (!TYPE_DETAIL.equals(guiType.getOrDefault(uuid, ""))) return;
+
+            List<CEBridge.RecipeData> group = playerRecipeGroup.get(uuid);
+            Integer index = playerRecipeIndex.get(uuid);
+            if (group == null || index == null || group.isEmpty()) return;
+
+            // 切到下一个配方（循环）
+            int nextIndex = (index + 1) % group.size();
+            playerRecipeIndex.put(uuid, nextIndex);
+
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && p.isOnline()) {
+                refreshDetailGUI(p);
+                // 继续下一轮
+                scheduleRecipeCycle(p, config.getMultiRecipeCycleSeconds());
+            }
+        }, delaySeconds * 20L);
+
+        playerCycleTask.put(uuid, task);
+    }
+
+    /** 停止自动轮播 */
+    public void stopRecipeCycle(Player player) {
+        UUID uuid = player.getUniqueId();
+        WrappedTask existing = playerCycleTask.remove(uuid);
+        if (existing != null) {
+            plugin.getFoliaLib().getScheduler().cancelTask(existing);
+        }
+    }
+
+    /** 清理多配方轮播状态 */
+    private void cleanupRecipeCycle(UUID uuid) {
+        WrappedTask existing = playerCycleTask.remove(uuid);
+        if (existing != null) {
+            plugin.getFoliaLib().getScheduler().cancelTask(existing);
+        }
+        playerRecipeGroup.remove(uuid);
+        playerRecipeIndex.remove(uuid);
+    }
+
     private Inventory buildDetailGUI(MenuDef menu) {
         Inventory inv = Bukkit.createInventory(null, MenuConfig.shapeSize(menu.shape()), menu.title());
         for (int row = 0; row < menu.shape().length; row++) {
@@ -1017,14 +1209,17 @@ public class RecipeGUI {
         return bridge.buildItemStack(itemId, Math.max(1, Math.min(count, 64)));
     }
 
-    private ItemStack createRecipeEntryIcon(CEBridge.RecipeData recipe) {
+    private ItemStack createRecipeEntryIcon(CEBridge.RecipeData recipe, int recipeCount) {
         ItemStack item = bridge.buildItemStack(recipe.resultId, recipe.resultCount);
         String typeName = config.getRecipeTypeName(recipe.type);
-        List<String> lore = List.of(
-                config.getBtnLoreResult(recipe.resultCount),
-                config.getBtnLoreType(typeName),
-                "", config.getBtnLoreClick()
-        );
+        List<String> lore = new ArrayList<>();
+        lore.add(config.getBtnLoreResult(recipe.resultCount));
+        lore.add(config.getBtnLoreType(typeName));
+        if (recipeCount > 1) {
+            lore.add(config.getBtnLoreMultiRecipes(recipeCount));
+        }
+        lore.add("");
+        lore.add(config.getBtnLoreClick());
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setLore(lore);
@@ -1460,6 +1655,7 @@ public class RecipeGUI {
         creatorFurnaceTime.remove(uuid);
         creatorExp.remove(uuid);
         creatorFurnaceMode.remove(uuid);
+        cleanupRecipeCycle(uuid);
     }
 
     public void closeAll() {

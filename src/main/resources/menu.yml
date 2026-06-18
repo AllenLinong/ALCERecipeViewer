@@ -154,12 +154,20 @@ detail_crafting:
     - "#III##R##"
     - "#III#####"
     - "#########"
-    - "####B####"
+    - "L###B###N"
   buttons:
     I:
       dynamic: true
     R:
       dynamic: true
+    L:
+      material: "ARROW"
+      name: "{@prev_recipe}"
+      action: "PREV_RECIPE"
+    N:
+      material: "ARROW"
+      name: "{@next_recipe}"
+      action: "NEXT_RECIPE"
     B:
       material: "OAK_DOOR"
       name: "{@back}"
@@ -177,7 +185,7 @@ detail_furnace:
     - "##I###R##"
     - "##H######"
     - "#########"
-    - "####B####"
+    - "L###B###N"
   buttons:
     I:
       dynamic: true
@@ -189,6 +197,14 @@ detail_furnace:
       lore:
         - "{@furnace_fuel_time}"
         - "{@furnace_fuel_exp}"
+    L:
+      material: "ARROW"
+      name: "{@prev_recipe}"
+      action: "PREV_RECIPE"
+    N:
+      material: "ARROW"
+      name: "{@next_recipe}"
+      action: "NEXT_RECIPE"
     B:
       material: "OAK_DOOR"
       name: "{@back}"
@@ -203,12 +219,20 @@ detail_smithing:
   shape:
     - "#########"
     - "#I#I#I#R#"
-    - "####B####"
+    - "L###B###N"
   buttons:
     I:
       dynamic: true
     R:
       dynamic: true
+    L:
+      material: "ARROW"
+      name: "{@prev_recipe}"
+      action: "PREV_RECIPE"
+    N:
+      material: "ARROW"
+      name: "{@next_recipe}"
+      action: "NEXT_RECIPE"
     B:
       material: "OAK_DOOR"
       name: "{@back}"
@@ -223,12 +247,20 @@ detail_stonecutter:
   shape:
     - "#########"
     - "##I###R##"
-    - "####B####"
+    - "L###B###N"
   buttons:
     I:
       dynamic: true
     R:
       dynamic: true
+    L:
+      material: "ARROW"
+      name: "{@prev_recipe}"
+      action: "PREV_RECIPE"
+    N:
+      material: "ARROW"
+      name: "{@next_recipe}"
+      action: "NEXT_RECIPE"
     B:
       material: "OAK_DOOR"
       name: "{@back}"
@@ -246,7 +278,7 @@ detail_brewing:
     - "##I#I#R##"
     - "##H######"
     - "#########"
-    - "####B####"
+    - "L###B###N"
   buttons:
     I:
       dynamic: true
@@ -257,6 +289,14 @@ detail_brewing:
       name: "{@brewing_blaze}"
       lore:
         - "{@brewing_fuel_desc}"
+    L:
+      material: "ARROW"
+      name: "{@prev_recipe}"
+      action: "PREV_RECIPE"
+    N:
+      material: "ARROW"
+      name: "{@next_recipe}"
+      action: "NEXT_RECIPE"
     B:
       material: "OAK_DOOR"
       name: "{@back}"

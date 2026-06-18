@@ -68,7 +68,7 @@ public class CEBridge {
             try {
                 initReflection();
                 this.available = true;
-                logger.info("  §a✓ §rCraftEngine v" + cePlugin.getDescription().getVersion() + " » 桥接就绪");
+                logger.info("  [OK] CraftEngine v" + cePlugin.getDescription().getVersion() + " » 桥接就绪");
             } catch (Exception e) {
                 logger.warning("CraftEngine 反射初始化失败: " + e.getMessage());
                 this.available = false;
@@ -99,7 +99,7 @@ public class CEBridge {
                 java.lang.reflect.Field pf = bootstrap.getClass().getDeclaredField("plugin");
                 pf.setAccessible(true);
                 actualPlugin = pf.get(bootstrap);
-                logger.info("  §a✓ §rCE 实例穿透 » " + actualPlugin.getClass().getSimpleName());
+                logger.info("  [OK] CE 实例穿透 » " + actualPlugin.getClass().getSimpleName());
             } catch (Exception ex) {
                 logger.info("非Paper壳: " + ex.getMessage());
             }
@@ -209,7 +209,7 @@ public class CEBridge {
                 if (translations != null) {
                     vanillaZhTranslations.putAll(translations);
                     vanillaZhLoaded = true;
-                    logger.info("  §a✓ §r原版 zh_cn 翻译 » " + translations.size() + " 条");
+                    logger.info("  [OK] 原版 zh_cn 翻译 » " + translations.size() + " 条");
                 }
                 reader.close();
             } else {
@@ -269,7 +269,7 @@ public class CEBridge {
         }
 
         int total = result.values().stream().mapToInt(List::size).sum();
-        logger.info("  §a✓ §r配方加载 » " + total + " 个 (" + result.size() + " 类型)");
+        logger.info("  [OK] 配方加载 » " + total + " 个 (" + result.size() + " 类型)");
         return result;
     }
 
@@ -560,7 +560,7 @@ public class CEBridge {
         itemNameCache.clear();
         ceTranslations.clear();
         ceTranslationsLoaded = false;
-        logger.info("  §a✓ §r名称缓存 » 已清除");
+        logger.info("  [OK] 名称缓存 » 已清除");
     }
 
     /**
@@ -900,7 +900,7 @@ public class CEBridge {
             @SuppressWarnings("unchecked")
             Map<String, Object> clientData = (Map<String, Object>) tm.getClass()
                     .getMethod("clientLangData").invoke(tm);
-            logger.info("  §a✓ §r翻译系统 » " + clientData.size() + " 种语言可用");
+            logger.info("  [OK] 翻译系统 » " + clientData.size() + " 种语言可用");
             Object zhCN = clientData.get("zh_cn");
             if (zhCN != null) {
                 @SuppressWarnings("unchecked")
@@ -922,7 +922,7 @@ public class CEBridge {
         int oldCount = ceTranslations.size();
         loadPackTranslationsYml();
         if (ceTranslations.size() > oldCount) {
-            logger.info("  §a✓ §r扩展翻译 » +" + (ceTranslations.size() - oldCount) + " 条");
+            logger.info("  [OK] 扩展翻译 » +" + (ceTranslations.size() - oldCount) + " 条");
         }
     }
 

@@ -30,6 +30,8 @@ recipe-lore:
   result: "&7产出: &f{count}个"
   type: "&7类型: &f{type}"
   click: "&e▶ 点击查看合成表"
+  multi-recipes: "&d◆ 共{count}种合成方式"
+  cycle-indicator: "&7配方 {current}/{total} &8| &7{interval}秒后切换"
 
 # 分类默认显示名称
 # 用于配方列表标题，若 lang.yml 未配置则回退到 CEBridge 内置名称
@@ -110,6 +112,8 @@ menu:
   search_clear: "&cShift+点击清空"
   back_to_main: "&c&l↩ 返回分类"
   back: "&c&l↩ 返回列表"
+  prev_recipe: "&a&l◀ 上一个配方"
+  next_recipe: "&a&l下一个配方 ▶"
   close: "&c&l✘ 关闭"
   main_title: "&8ALCE合成表 - 分类浏览"
   background: " "

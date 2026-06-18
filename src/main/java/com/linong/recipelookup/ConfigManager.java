@@ -23,13 +23,14 @@ public class ConfigManager {
 
     // config.yml
     private boolean debug;
+    private int multiRecipeCycleSeconds;
     private String language;
 
     // lang.yml
     private String pluginPrefix;
     private String searchTitleSuffix;
     private final Map<String, String> recipeTypeNames = new LinkedHashMap<>();
-    private String btnLoreResult, btnLoreType, btnLoreClick;
+    private String btnLoreResult, btnLoreType, btnLoreClick, btnLoreMultiRecipes, btnLoreCycleIndicator;
     private Map<String, String> customItemNames;
     private final Map<String, String> defaultCategoryNames = new LinkedHashMap<>();
     private String chatSearchPrompt, chatSearchCancelled, chatSearchResult;
@@ -43,6 +44,7 @@ public class ConfigManager {
         plugin.reloadConfig();
         this.mainConfig = plugin.getConfig();
         debug = mainConfig.getBoolean("features.debug", false);
+        multiRecipeCycleSeconds = mainConfig.getInt("features.multi-recipe-cycle-seconds", 5);
         language = mainConfig.getString("language", "zh_cn");
 
         // 按配置语言加载语言文件
@@ -52,7 +54,7 @@ public class ConfigManager {
         this.langConfig = YamlConfiguration.loadConfiguration(langFile);
         loadLang();
 
-        plugin.getLogger().info("  §a✔ 配置加载完成");
+        plugin.getLogger().info("  [OK] 配置加载完成");
     }
 
     public void reload() { loadConfig(); }
@@ -68,6 +70,8 @@ public class ConfigManager {
         btnLoreResult = color(langConfig.getString("recipe-lore.result", "&7产出: &f{count}个"));
         btnLoreType = color(langConfig.getString("recipe-lore.type", "&7类型: &f{type}"));
         btnLoreClick = color(langConfig.getString("recipe-lore.click", "&e▶ 点击查看合成表"));
+        btnLoreMultiRecipes = color(langConfig.getString("recipe-lore.multi-recipes", "&d◆ 共{count}种合成方式"));
+        btnLoreCycleIndicator = color(langConfig.getString("recipe-lore.cycle-indicator", "&7配方 {current}/{total} &8| &7{interval}秒后切换"));
 
         customItemNames = new LinkedHashMap<>();
         ConfigurationSection cn = langConfig.getConfigurationSection("custom-names");
@@ -110,6 +114,7 @@ public class ConfigManager {
     private String color(String t) { return t == null ? "" : ChatColor.translateAlternateColorCodes('&', t); }
 
     public boolean isDebug() { return debug; }
+    public int getMultiRecipeCycleSeconds() { return Math.max(1, multiRecipeCycleSeconds); }
     public String getLanguage() { return language; }
     /** 从语言文件读取指定路径的文本 */
     public String getLangString(String path) {
@@ -122,6 +127,12 @@ public class ConfigManager {
     public String getBtnLoreResult(int c) { return btnLoreResult.replace("{count}", String.valueOf(c)); }
     public String getBtnLoreType(String t) { return btnLoreType.replace("{type}", t); }
     public String getBtnLoreClick() { return btnLoreClick; }
+    public String getBtnLoreMultiRecipes(int count) { return btnLoreMultiRecipes.replace("{count}", String.valueOf(count)); }
+    public String getBtnLoreCycleIndicator(int current, int total, int interval) {
+        return btnLoreCycleIndicator.replace("{current}", String.valueOf(current))
+                .replace("{total}", String.valueOf(total))
+                .replace("{interval}", String.valueOf(interval));
+    }
     public String getCustomItemName(String id) {
         if (id == null) return null;
         String e = customItemNames.get(id);
