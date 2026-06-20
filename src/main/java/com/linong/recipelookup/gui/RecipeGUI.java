@@ -752,7 +752,7 @@ public class RecipeGUI {
                     yaml.append("    category: misc\n");
                     yaml.append("    ingredients:\n");
                     for (String ing : ingredientList)
-                        yaml.append("      - id: ").append(ing).append("\n        count: 1\n");
+                        yaml.append("      - ").append(ing).append("\n");
                 }
                 yaml.append("    result:\n");
                 yaml.append("      id: ").append(resultId).append("\n");
