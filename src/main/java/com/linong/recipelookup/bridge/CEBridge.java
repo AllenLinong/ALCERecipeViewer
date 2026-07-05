@@ -344,6 +344,7 @@ public class CEBridge {
             // 提取有序合成 pattern
             String[] shapedPattern = null;
             Map<String, String> patternKeyIds = null;
+            Map<String, Integer> patternKeyCounts = null;
             try {
                 // recipe.pattern() → CustomShapedRecipe$Pattern
                 Object pattern = callGet(recipe, "pattern");
@@ -356,6 +357,7 @@ public class CEBridge {
                     Object ingMap = callGet(pattern, "ingredients");
                     if (ingMap instanceof Map<?, ?> map) {
                         patternKeyIds = new LinkedHashMap<>();
+                        patternKeyCounts = new LinkedHashMap<>();
                         for (Map.Entry<?, ?> e : map.entrySet()) {
                             String ch = e.getKey().toString();
                             // Get first item from Ingredient
@@ -363,6 +365,13 @@ public class CEBridge {
                             List<String> keys = extractIngredientKeys(ing);
                             String firstKey = keys.isEmpty() ? "?" : keys.get(0);
                             patternKeyIds.put(ch, firstKey);
+                            // 提取该 Ingredient 的数量
+                            int cnt = 1;
+                            try {
+                                Object cntObj = ing.getClass().getMethod("count").invoke(ing);
+                                if (cntObj instanceof Number n) cnt = n.intValue();
+                            } catch (Exception ignored2) {}
+                            patternKeyCounts.put(ch, cnt);
                         }
                     }
                 }
@@ -382,7 +391,7 @@ public class CEBridge {
 
             return new RecipeData(id, type, resultId, resultCount,
                     ingredientIds, ingredientCounts, allIngredientIds,
-                    shapedPattern, patternKeyIds,
+                    shapedPattern, patternKeyIds, patternKeyCounts,
                     cookingTime, experience);
         } catch (Exception e) {
             logger.info("提取配方数据失败: " + e.getMessage());
@@ -1311,6 +1320,8 @@ public class CEBridge {
         public final String[] shapedPattern;
         /** pattern 字符 → 物品ID 映射 */
         public final Map<String, String> patternKeyIds;
+        /** pattern 字符 → 物品数量 映射（有序配方中同一字符的 Ingredient.count） */
+        public final Map<String, Integer> patternKeyCounts;
         /** 烹饪时间（ticks），仅熔炉类配方有效 */
         public final int cookingTime;
         /** 经验值，仅熔炉类配方有效 */
@@ -1320,6 +1331,7 @@ public class CEBridge {
                           List<String> ingredientIds, List<Integer> ingredientCounts,
                           List<String> allIngredientIds,
                           String[] shapedPattern, Map<String, String> patternKeyIds,
+                          Map<String, Integer> patternKeyCounts,
                           int cookingTime, float experience) {
             this.id = id != null ? id : "unknown";
             this.type = type != null ? type : "unknown";
@@ -1330,6 +1342,7 @@ public class CEBridge {
             this.allIngredientIds = allIngredientIds != null ? allIngredientIds : this.ingredientIds;
             this.shapedPattern = shapedPattern;
             this.patternKeyIds = patternKeyIds;
+            this.patternKeyCounts = patternKeyCounts != null ? patternKeyCounts : Map.of();
             this.cookingTime = cookingTime;
             this.experience = experience;
         }

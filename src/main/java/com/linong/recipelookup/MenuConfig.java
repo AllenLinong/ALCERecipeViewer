@@ -159,8 +159,11 @@ public class MenuConfig {
 
         String action = s.getString("action", defaultAction != null ? defaultAction : "");
         String category = s.getString("category", "");
+        String sound = s.getString("sound", "block.note_block.pling");
+        String command = s.getString("command", "");
+        boolean asPlayer = s.getBoolean("as_player", true);
 
-        return new ButtonDef(mat, name, lore, action, category, dynamic, ceItem);
+        return new ButtonDef(mat, name, lore, action, category, dynamic, ceItem, sound, command, asPlayer);
     }
 
     // ==================== 槽位计算 ====================
@@ -312,9 +315,22 @@ public class MenuConfig {
 
     public record ButtonDef(Material material, String name, List<String> lore,
                             String action, String category, boolean dynamic,
-                            String ceItem) {
+                            String ceItem, String sound, String command, boolean asPlayer) {
         /** CE 物品 ID（如 internal:cooking_info），null 表示使用标准 Material */
         public String ceItem() { return ceItem; }
+        /** 按钮点击声音（原版 Sound 键名或 CE 自定义声音 ID），默认 "block.note_block.pling" */
+        public String sound() { return sound; }
+        /** 自定义命令（action=RUN_COMMAND 时执行），"" 表示无 */
+        public String command() { return command; }
+        /** 命令以谁的身份执行：true=玩家，false=控制台 */
+        public boolean asPlayer() { return asPlayer; }
+
+        /** 便利构造器（无 sound/command） */
+        public ButtonDef(Material material, String name, List<String> lore,
+                         String action, String category, boolean dynamic,
+                         String ceItem) {
+            this(material, name, lore, action, category, dynamic, ceItem, "block.note_block.pling", "", true);
+        }
     }
 
     // ==================== 工具方法 ====================

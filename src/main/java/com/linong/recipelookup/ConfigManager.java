@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 管理插件配置：config.yml + lang.yml。
+ * 管理插件配置：config.yml + lang/语言代码.yml。
  * menu.yml 由 MenuConfig 单独管理。
  */
 public class ConfigManager {

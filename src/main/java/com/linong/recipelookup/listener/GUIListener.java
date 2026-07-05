@@ -7,7 +7,9 @@ import com.linong.recipelookup.MenuConfig.ButtonDef;
 import com.linong.recipelookup.MenuConfig.MenuDef;
 import com.linong.recipelookup.bridge.CEBridge;
 import com.linong.recipelookup.gui.RecipeGUI;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.SoundCategory;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -54,7 +56,9 @@ public class GUIListener implements Listener {
                 if (detailMenu != null) {
                     ButtonDef btn = MenuConfig.buttonAt(detailMenu, slot);
                     if (btn != null) {
+                        playButtonSound(player, btn);
                         switch (btn.action()) {
+                            case "RUN_COMMAND" -> runButtonCommand(player, btn);
                             case "BACK" -> {
                                 gui.stopRecipeCycle(player);
                                 String cat = gui.getPlayerCategory(player.getUniqueId());
@@ -205,6 +209,31 @@ public class GUIListener implements Listener {
         }
     }
 
+    // ========== 按钮声音 ==========
+
+    /** 播放按钮点击声音。支持原版 Sound 键名和 CE 自定义声音 ID（如 namespace:sound_id）。 */
+    private void playButtonSound(Player player, ButtonDef btn) {
+        if (btn == null || btn.sound() == null || btn.sound().isEmpty()) return;
+        String key = btn.sound();
+        try {
+            player.playSound(player.getLocation(), key, SoundCategory.MASTER, 1.0f, 1.0f);
+        } catch (Exception ignored) {
+            // 自定义声音可能未注册，静默忽略
+        }
+    }
+
+    /** 执行按钮的自定义命令 */
+    private void runButtonCommand(Player player, ButtonDef btn) {
+        String cmd = btn.command();
+        if (cmd == null || cmd.isEmpty()) return;
+        if (btn.asPlayer()) {
+            player.performCommand(cmd);
+        } else {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
+                    cmd.replace("{player}", player.getName()));
+        }
+    }
+
     // ========== 主菜单 ==========
 
     private void handleMainClick(Player player, int slot, MenuDef menu) {
@@ -212,14 +241,16 @@ public class GUIListener implements Listener {
         ButtonDef btn = MenuConfig.buttonAt(menu, slot);
         if (btn == null || btn.action().isEmpty()) return;
 
+        playButtonSound(player, btn);
+
         switch (btn.action()) {
             case "OPEN_CATEGORY" -> {
                 if (!btn.category().isEmpty()) {
                     gui.openRecipeList(player, btn.category(), 0);
                 }
             }
+            case "RUN_COMMAND" -> runButtonCommand(player, btn);
             case "CLOSE" -> player.closeInventory();
-            // 其他 action 在主菜单无意义
         }
     }
 
@@ -267,7 +298,10 @@ public class GUIListener implements Listener {
         ButtonDef btn = menu.buttons().get(c);
         if (btn == null || btn.action().isEmpty()) return;
 
+        playButtonSound(player, btn);
+
         switch (btn.action()) {
+            case "RUN_COMMAND" -> runButtonCommand(player, btn);
             case "PREV_PAGE" -> {
                 if (page > 0) gui.openRecipeList(player, categoryId, page - 1);
             }
@@ -336,7 +370,9 @@ public class GUIListener implements Listener {
 
     private void handleCreatorAction(Player player, InventoryClickEvent event, ButtonDef btn) {
         if (btn == null || btn.action().isEmpty()) return;
+        playButtonSound(player, btn);
         switch (btn.action()) {
+            case "RUN_COMMAND" -> runButtonCommand(player, btn);
             case "CREATOR_SHAPED" -> gui.openRecipeCreator(player, "shaped");
             case "CREATOR_SHAPELESS" -> gui.openRecipeCreator(player, "shapeless");
             case "CREATOR_FURNACE" -> gui.openRecipeCreator(player, "furnace");

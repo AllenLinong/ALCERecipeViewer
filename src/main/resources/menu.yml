@@ -1,8 +1,30 @@
 # ============================================================
 # AL-RecipeViewer 菜单配置文件 (Shape 布局)
 # 文字使用 {@key} 引用 lang 文件中的 menu 节点
+#
+# 按钮配置项:
+#   material: 原版 Material 枚举值（如 CRAFTING_TABLE）或 CE 自定义物品 ID（如 namespace:item_id）
+#   name: 按钮显示名称，支持 {@key} 语言引用
+#   lore: 按钮说明文字列表
+#   action: 点击行为
+#     OPEN_CATEGORY  - 打开某个分类的配方列表（需配置 category）
+#     PREV_PAGE      - 翻到上一页
+#     NEXT_PAGE      - 翻到下一页
+#     PREV_RECIPE    - 切换到上一个配方（多配方轮播）
+#     NEXT_RECIPE    - 切换到下一个配方（多配方轮播）
+#     BACK           - 返回上一级菜单
+#     BACK_TO_MAIN   - 返回主菜单
+#     CLOSE          - 关闭菜单
+#     SEARCH         - 搜索配方
+#     RUN_COMMAND    - 执行自定义命令（需配置 command）
+#   category: 分类 ID（action=OPEN_CATEGORY 时需要）
+#   command: 自定义命令（action=RUN_COMMAND 时生效，不带 /）
+#   as_player: true=以玩家身份执行，false=控制台（{player}=玩家名）
+#   sound: 点击音效，支持原版声音（如 block.note_block.pling）或 CE 自定义声音（如 namespace:sound_id）
+#          不填默认使用 block.note_block.pling
 # ============================================================
 
+# ===== 主菜单 =====
 main_menu:
   title: "{@main_title}"
   shape:
@@ -13,6 +35,8 @@ main_menu:
     - "#########"
     - "#########"
   buttons:
+    # ---- 8 个分类入口 ----
+    # 工作台配方
     A:
       material: "CRAFTING_TABLE"
       name: "{@category_crafting}"
@@ -23,6 +47,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "crafting"
+    # 熔炉配方
     B:
       material: "FURNACE"
       name: "{@category_smelting}"
@@ -33,6 +58,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "smelting"
+    # 高炉配方
     C:
       material: "BLAST_FURNACE"
       name: "{@category_blasting}"
@@ -43,6 +69,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "blasting"
+    # 烟熏炉配方
     D:
       material: "SMOKER"
       name: "{@category_smoking}"
@@ -53,6 +80,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "smoking"
+    # 营火配方
     E:
       material: "CAMPFIRE"
       name: "{@category_campfire}"
@@ -63,6 +91,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "campfire_cooking"
+    # 切石机配方
     F:
       material: "STONECUTTER"
       name: "{@category_stonecutting}"
@@ -73,6 +102,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "stonecutting"
+    # 锻造台配方
     G:
       material: "SMITHING_TABLE"
       name: "{@category_smithing}"
@@ -83,6 +113,7 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "smithing"
+    # 酿造台配方
     H:
       material: "BREWING_STAND"
       name: "{@category_brewing}"
@@ -93,10 +124,23 @@ main_menu:
         - "{@click_browse}"
       action: "OPEN_CATEGORY"
       category: "brewing"
+    # ---- 背景填充 ----
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+    # ---- 自定义命令按钮示例（取消注释并将 Z 加入 shape 即可启用）----
+    #Z:
+    #  material: "BOOK"
+    #  name: "&6Wiki"
+    #  lore:
+    #    - "&7打开Wiki页面"
+    #  action: "RUN_COMMAND"
+    #  command: "wiki open"
+    #  as_player: true
+    #  sound: "block.note_block.pling"
+
+# ===== 配方列表（分类浏览）=====
 recipe_list:
   title: "&8{category} ({page}/{total})"
   shape:
@@ -107,14 +151,17 @@ recipe_list:
     - "#IIIIIII#"
     - "P#S#B###N"
   buttons:
+    # 动态物品区 — 显示当前页的配方图标
     I:
       dynamic: true
+    # 上一页
     P:
       material: "ARROW"
       name: "{@prev_page}"
       lore:
         - "{@page_indicator}"
       action: "PREV_PAGE"
+    # 搜索按钮（左键搜索 / 右键切换模式 / Shift+左键清空）
     S:
       material: "COMPASS"
       name: "{@search}"
@@ -125,28 +172,31 @@ recipe_list:
         - "{@search_right}"
         - "{@search_shift}"
       action: "SEARCH"
+    # 返回主菜单
     B:
       material: "OAK_DOOR"
       name: "{@back_to_main}"
       lore:
         - "{@back_to_main_desc}"
       action: "BACK_TO_MAIN"
+    # 下一页
     N:
       material: "ARROW"
       name: "{@next_page}"
       lore:
         - "{@page_indicator}"
       action: "NEXT_PAGE"
+    # 关闭菜单
     C:
       material: "BARRIER"
       name: "{@close}"
       action: "CLOSE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
-# ----- 配方详情 GUI -----
-
+# ===== 配方详情 — 工作台 =====
 detail_crafting:
   title: "{@detail_crafting_title}"
   size: 54
@@ -158,26 +208,33 @@ detail_crafting:
     - "#########"
     - "L###B###N"
   buttons:
+    # 原料 — 3×3 配方格
     I:
       dynamic: true
+    # 结果物品
     R:
       dynamic: true
+    # 上一个配方（同物品其他合成方式）
     L:
       material: "ARROW"
       name: "{@prev_recipe}"
       action: "PREV_RECIPE"
+    # 下一个配方
     N:
       material: "ARROW"
       name: "{@next_recipe}"
       action: "NEXT_RECIPE"
+    # 返回配方列表
     B:
       material: "OAK_DOOR"
       name: "{@back}"
       action: "BACK"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方详情 — 熔炉/高炉/烟熏炉 =====
 detail_furnace:
   title: "{@detail_furnace_title}"
   size: 54
@@ -189,32 +246,40 @@ detail_furnace:
     - "#########"
     - "L###B###N"
   buttons:
+    # 烧炼原料
     I:
       dynamic: true
+    # 烧炼结果
     R:
       dynamic: true
+    # 烧炼信息（燃料时间 + 经验）
     H:
       material: "internal:cooking_info"
       name: "{@furnace_flame}"
       lore:
         - "{@furnace_fuel_time}"
         - "{@furnace_fuel_exp}"
+    # 上一个配方
     L:
       material: "ARROW"
       name: "{@prev_recipe}"
       action: "PREV_RECIPE"
+    # 下一个配方
     N:
       material: "ARROW"
       name: "{@next_recipe}"
       action: "NEXT_RECIPE"
+    # 返回配方列表
     B:
       material: "OAK_DOOR"
       name: "{@back}"
       action: "BACK"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方详情 — 锻造台 =====
 detail_smithing:
   title: "{@detail_smithing_title}"
   size: 27
@@ -223,26 +288,33 @@ detail_smithing:
     - "#I#I#I#R#"
     - "L###B###N"
   buttons:
+    # 原料（模板 + 底材 + 锻造材料）
     I:
       dynamic: true
+    # 锻造结果
     R:
       dynamic: true
+    # 上一个配方
     L:
       material: "ARROW"
       name: "{@prev_recipe}"
       action: "PREV_RECIPE"
+    # 下一个配方
     N:
       material: "ARROW"
       name: "{@next_recipe}"
       action: "NEXT_RECIPE"
+    # 返回配方列表
     B:
       material: "OAK_DOOR"
       name: "{@back}"
       action: "BACK"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方详情 — 切石机 =====
 detail_stonecutter:
   title: "{@detail_stonecutter_title}"
   size: 27
@@ -251,26 +323,33 @@ detail_stonecutter:
     - "##I###R##"
     - "L###B###N"
   buttons:
+    # 原料
     I:
       dynamic: true
+    # 切石结果
     R:
       dynamic: true
+    # 上一个配方
     L:
       material: "ARROW"
       name: "{@prev_recipe}"
       action: "PREV_RECIPE"
+    # 下一个配方
     N:
       material: "ARROW"
       name: "{@next_recipe}"
       action: "NEXT_RECIPE"
+    # 返回配方列表
     B:
       material: "OAK_DOOR"
       name: "{@back}"
       action: "BACK"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方详情 — 酿造台 =====
 detail_brewing:
   title: "{@detail_brewing_title}"
   size: 54
@@ -282,27 +361,29 @@ detail_brewing:
     - "#########"
     - "L###B###N"
   buttons:
+    # 酿造原料（容器 + 材料）
     I:
       dynamic: true
+    # 酿造结果
     R:
       dynamic: true
+    # 酿造燃料提示
     H:
       material: "BLAZE_POWDER"
       name: "{@brewing_blaze}"
       lore:
         - "{@brewing_fuel_desc}"
+    # 上一个配方
     L:
       material: "ARROW"
       name: "{@prev_recipe}"
       action: "PREV_RECIPE"
+    # 下一个配方
     N:
       material: "ARROW"
       name: "{@next_recipe}"
       action: "NEXT_RECIPE"
+    # 返回配方列表
     B:
       material: "OAK_DOOR"
-      name: "{@back}"
       action: "BACK"
-    "#":
-      material: "BLACK_STAINED_GLASS_PANE"
-      name: " "

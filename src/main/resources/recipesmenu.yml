@@ -1,8 +1,12 @@
 # ============================================================
 # AL-RecipeViewer 新增配方菜单配置
 # 文字使用 {@key} 引用 lang 文件中的 menu 节点
+#
+# 按钮配置项同 menu.yml，额外支持:
+#   sound: 点击音效（原版 Sound 或 CE 自定义声音 ID，默认 block.note_block.pling）
 # ============================================================
 
+# ===== 配方创建器 — 类型选择 =====
 recipe_creator_type:
   title: "{@creator_type_title}"
   size: 54
@@ -12,62 +16,73 @@ recipe_creator_type:
     - "#L#Y#T#N#"
     - "####B####"
   buttons:
+    # 有序合成（工作台 3×3）
     A:
       material: "CRAFTING_TABLE"
       name: "{@creator_shaped}"
       lore:
         - "{@creator_shaped_desc}"
       action: "CREATOR_SHAPED"
+    # 无序合成
     C:
       material: "CRAFTING_TABLE"
       name: "{@creator_shapeless}"
       lore:
         - "{@creator_shapeless_desc}"
       action: "CREATOR_SHAPELESS"
+    # 熔炉 / 高炉
     F:
       material: "FURNACE"
       name: "{@creator_furnace}"
       lore:
         - "{@creator_furnace_desc}"
       action: "CREATOR_FURNACE"
+    # 锻造台
     S:
       material: "SMITHING_TABLE"
       name: "{@creator_smithing}"
       lore:
         - "{@creator_smithing_desc}"
       action: "CREATOR_SMITHING"
+    # 切石机
     T:
       material: "STONECUTTER"
       name: "{@creator_stonecutter}"
       lore:
         - "{@creator_stonecutter_desc}"
       action: "CREATOR_STONECUTTER"
+    # 酿造台
     N:
       material: "BREWING_STAND"
       name: "{@creator_brewing}"
       lore:
         - "{@creator_brewing_desc}"
       action: "CREATOR_BREWING"
+    # 营火
     L:
       material: "CAMPFIRE"
       name: "{@creator_campfire}"
       lore:
         - "{@creator_campfire_desc}"
       action: "CREATOR_CAMPFIRE"
+    # 烟熏炉
     Y:
       material: "SMOKER"
       name: "{@creator_smoking}"
       lore:
         - "{@creator_smoking_desc}"
       action: "CREATOR_SMOKING"
+    # 返回
     B:
       material: "OAK_DOOR"
       name: "{@creator_back}"
       action: "BACK"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 有序合成 =====
 recipe_creator_shaped:
   title: "{@creator_shaped_title}"
   size: 54
@@ -79,18 +94,23 @@ recipe_creator_shaped:
     - "#########"
     - "####B####"
   buttons:
+    # 原料区 — 3×3 配方格（从背包拖入物品）
     I:
       dynamic: true
+    # 结果物品 — 从背包拖入
     R:
       dynamic: true
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 无序合成 =====
 recipe_creator_shapeless:
   title: "{@creator_shapeless_title}"
   size: 54
@@ -102,18 +122,23 @@ recipe_creator_shapeless:
     - "#########"
     - "####B####"
   buttons:
+    # 原料区 — 3×3 配方格（从背包拖入物品）
     I:
       dynamic: true
+    # 结果物品 — 从背包拖入
     R:
       dynamic: true
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 熔炉 / 高炉 =====
 recipe_creator_furnace:
   title: "{@creator_furnace_title}"
   size: 54
@@ -125,10 +150,13 @@ recipe_creator_furnace:
     - "#########"
     - "####B####"
   buttons:
+    # 烧炼原料 — 从背包拖入
     I:
       dynamic: true
+    # 烧炼结果 — 从背包拖入
     R:
       dynamic: true
+    # 切换模式：左键=高炉 / 右键=熔炉 / Shift+左键=两者
     S:
       material: "GREEN_STAINED_GLASS_PANE"
       name: "{@furnace_mode}"
@@ -137,6 +165,7 @@ recipe_creator_furnace:
         - "{@furnace_mode_right}"
         - "{@furnace_mode_shift}"
       action: "CREATOR_FURNACE_MODE"
+    # 烧炼时间 — 左键 +1 / 右键 -1（ticks，20 ticks = 1 秒）
     P:
       material: "CLOCK"
       name: "{@furnace_time}"
@@ -145,6 +174,7 @@ recipe_creator_furnace:
         - "{@furnace_time_mode}"
         - "{@furnace_time_hint}"
       action: "CREATOR_FURNACE_TIME"
+    # 经验值 — 左键 +0.1 / 右键 -0.1 / Shift+左键 手动输入
     E:
       material: "EXPERIENCE_BOTTLE"
       name: "{@furnace_exp}"
@@ -152,14 +182,17 @@ recipe_creator_furnace:
         - "{@furnace_exp_lore}"
         - "{@furnace_exp_shift}"
       action: "CREATOR_EXP"
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 烟熏炉 =====
 recipe_creator_smoking:
   title: "{@creator_smoking_title}"
   size: 54
@@ -171,16 +204,20 @@ recipe_creator_smoking:
     - "#########"
     - "####B####"
   buttons:
+    # 烧炼原料
     I:
       dynamic: true
+    # 烧炼结果
     R:
       dynamic: true
+    # 烟熏时间 — 左键 +1 / 右键 -1
     Y:
       material: "SMOKER"
       name: "{@smoking_time}"
       lore:
         - "{@smoking_time_lore}"
       action: "CREATOR_SMOKING_TIME"
+    # 经验值 — 左键 +0.1 / 右键 -0.1 / Shift+左键 手动输入
     E:
       material: "EXPERIENCE_BOTTLE"
       name: "{@creator_exp}"
@@ -188,14 +225,17 @@ recipe_creator_smoking:
         - "{@furnace_exp_lore}"
         - "{@furnace_exp_shift}"
       action: "CREATOR_EXP"
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 营火 =====
 recipe_creator_campfire:
   title: "{@creator_campfire_title}"
   size: 54
@@ -207,10 +247,13 @@ recipe_creator_campfire:
     - "#########"
     - "####B####"
   buttons:
+    # 营火原料
     I:
       dynamic: true
+    # 营火结果
     R:
       dynamic: true
+    # 营火时间 — 左键 +1 / 右键 -1（默认 30 秒）
     G:
       material: "CAMPFIRE"
       name: "{@campfire_time}"
@@ -218,14 +261,17 @@ recipe_creator_campfire:
         - "{@campfire_time_lore}"
         - "{@campfire_time_default}"
       action: "CREATOR_CAMPFIRE_TIME"
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 切石机 =====
 recipe_creator_stonecutter:
   title: "{@creator_stonecutter_title}"
   size: 27
@@ -234,18 +280,23 @@ recipe_creator_stonecutter:
     - "##I###R##"
     - "####B####"
   buttons:
+    # 原料
     I:
       dynamic: true
+    # 切石结果
     R:
       dynamic: true
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 锻造台 =====
 recipe_creator_smithing:
   title: "{@creator_smithing_title}"
   size: 27
@@ -254,18 +305,23 @@ recipe_creator_smithing:
     - "#I#I#I#R#"
     - "####B####"
   buttons:
+    # 原料（模板 + 底材 + 锻造材料）
     I:
       dynamic: true
+    # 锻造结果
     R:
       dynamic: true
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
+# ===== 配方创建器 — 酿造台 =====
 recipe_creator_brewing:
   title: "{@creator_brewing_title}"
   size: 27
@@ -274,14 +330,18 @@ recipe_creator_brewing:
     - "##I#I#R##"
     - "####B####"
   buttons:
+    # 酿造原料（容器 + 材料）
     I:
       dynamic: true
+    # 酿造结果
     R:
       dynamic: true
+    # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
       action: "SAVE_RECIPE"
+    # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "

@@ -90,12 +90,12 @@ public class RecipeGUI {
                 if (btn.dynamic()) continue;
 
                 if (c == '#') {
-                    inv.setItem(slot, menuConfig.buildButton(btn, null));
+                    inv.setItem(slot, buildButtonOrCE(btn, null));
                 } else {
                     int count = plugin.getLoadedRecipes()
                             .getOrDefault(btn.category(), List.of()).size();
                     Map<String, String> v = MenuConfig.vars("count", String.valueOf(count));
-                    inv.setItem(slot, menuConfig.buildButton(btn, v));
+                    inv.setItem(slot, buildButtonOrCE(btn, v));
                 }
             }
         }
@@ -161,7 +161,7 @@ public class RecipeGUI {
                         recipeIdx++;
                     }
                 } else if (c == '#') {
-                    inv.setItem(slot, menuConfig.buildButton(btn, null));
+                    inv.setItem(slot, buildButtonOrCE(btn, null));
                 } else {
                     String currentMode = searchMode.getOrDefault(player.getUniqueId(), SEARCH_MODE_RESULT);
                     String modeText = SEARCH_MODE_RESULT.equals(currentMode)
@@ -173,7 +173,7 @@ public class RecipeGUI {
                             "category", categoryName,
                             "mode_line", modeText
                     );
-                    inv.setItem(slot, menuConfig.buildButton(btn, v));
+                    inv.setItem(slot, buildButtonOrCE(btn, v));
                 }
             }
         }
@@ -320,7 +320,7 @@ public class RecipeGUI {
         ButtonDef eBtn = menu.buttons().get('E');
         if (eBtn == null) return;
         String s = String.format("%.1f", creatorExp.getOrDefault(uuid, 10) / 10.0);
-        inv.setItem(eSlots.get(0), menuConfig.buildButton(eBtn, MenuConfig.vars("time", s, "exp", s)));
+        inv.setItem(eSlots.get(0), buildButtonOrCE(eBtn, MenuConfig.vars("time", s, "exp", s)));
     }
 
     private void refreshCreatorButtons(Inventory inv, String type, UUID uuid) {
@@ -349,7 +349,7 @@ public class RecipeGUI {
                 pVars = MenuConfig.vars("time", String.valueOf(value), "mode", furnaceModeDisplay(fMode));
             else
                 pVars = MenuConfig.vars("time", String.valueOf(value));
-            inv.setItem(slots.get(0), menuConfig.buildButton(btn, pVars));
+            inv.setItem(slots.get(0), buildButtonOrCE(btn, pVars));
         }
         if (fMode != null) {
             ButtonDef sBtn = menu.buttons().get('S');
@@ -364,7 +364,7 @@ public class RecipeGUI {
             List<Integer> eSlots = charSlots(menu.shape(), 'E');
             if (!eSlots.isEmpty()) {
                 String s = String.format("%.1f", creatorExp.getOrDefault(uuid, 10) / 10.0);
-                inv.setItem(eSlots.get(0), menuConfig.buildButton(eBtn, MenuConfig.vars("time", s, "exp", s)));
+                inv.setItem(eSlots.get(0), buildButtonOrCE(eBtn, MenuConfig.vars("time", s, "exp", s)));
             }
         }
     }
@@ -454,7 +454,7 @@ public class RecipeGUI {
         } else {
             vars = MenuConfig.vars("time", label, "exp", label);
         }
-        inv.setItem(slots.get(0), menuConfig.buildButton(btn, vars));
+        inv.setItem(slots.get(0), buildButtonOrCE(btn, vars));
     }
 
     private Inventory buildCreatorGUI(MenuDef menu, UUID uuid) {
@@ -487,7 +487,7 @@ public class RecipeGUI {
                     String s = String.format("%.1f", creatorExp.getOrDefault(uuid, 10) / 10.0);
                     v = MenuConfig.vars("time", s, "exp", s);
                 }
-                inv.setItem(slot, menuConfig.buildButton(btn, v));
+                inv.setItem(slot, buildButtonOrCE(btn, v));
             }
         }
         return inv;
@@ -546,7 +546,7 @@ public class RecipeGUI {
         List<Integer> pSlots = charSlots(menu.shape(), 'P');
         if (pBtn != null && !pSlots.isEmpty()) {
             int timeVal = "blast".equals(mode) ? creatorTime.getOrDefault(uuid, 5) : creatorFurnaceTime.getOrDefault(uuid, 10);
-            inv.setItem(pSlots.get(0), menuConfig.buildButton(pBtn, MenuConfig.vars("time", String.valueOf(timeVal), "mode", modeDisplay)));
+            inv.setItem(pSlots.get(0), buildButtonOrCE(pBtn, MenuConfig.vars("time", String.valueOf(timeVal), "mode", modeDisplay)));
         }
     }
 
@@ -557,7 +557,7 @@ public class RecipeGUI {
             for (int col = 0; col < line.length() && col < 9; col++) {
                 char c = line.charAt(col);
                 ButtonDef btn = menu.buttons().get(c);
-                if (btn != null && !btn.dynamic()) inv.setItem(row * 9 + col, menuConfig.buildButton(btn, null));
+                if (btn != null && !btn.dynamic()) inv.setItem(row * 9 + col, buildButtonOrCE(btn, null));
             }
         }
         return inv;
@@ -920,7 +920,7 @@ public class RecipeGUI {
                         "time", formatCookingTime(recipe.cookingTime),
                         "exp", recipe.experience > 0 ? String.valueOf(recipe.experience) : "0"
                 );
-                inv.setItem(qSlots.get(0), menuConfig.buildButton(qBtn, v));
+                inv.setItem(qSlots.get(0), buildButtonOrCE(qBtn, v));
             }
         }
         return inv;
@@ -933,17 +933,22 @@ public class RecipeGUI {
         if (recipe.shapedPattern != null && recipe.patternKeyIds != null && iSlots.size() >= 9) {
             String[] pattern = recipe.shapedPattern;
             Map<String, String> keyMap = recipe.patternKeyIds;
+            Map<String, Integer> countMap = recipe.patternKeyCounts;
             for (int r = 0; r < pattern.length && r < 3; r++) {
                 for (int c = 0; c < pattern[r].length() && c < 3; c++) {
                     char ch = pattern[r].charAt(c);
                     int idx = r * 3 + c;
-                    if (ch != ' ' && keyMap.containsKey(String.valueOf(ch)) && idx < iSlots.size())
-                        inv.setItem(iSlots.get(idx), createNamedItem(keyMap.get(String.valueOf(ch)), 1));
+                    if (ch != ' ' && keyMap.containsKey(String.valueOf(ch)) && idx < iSlots.size()) {
+                        int count = countMap != null ? countMap.getOrDefault(String.valueOf(ch), 1) : 1;
+                        inv.setItem(iSlots.get(idx), createNamedItem(keyMap.get(String.valueOf(ch)), count));
+                    }
                 }
             }
         } else {
-            for (int i = 0; i < ings.size() && i < iSlots.size(); i++)
-                inv.setItem(iSlots.get(i), createNamedItem(ings.get(i), 1));
+            for (int i = 0; i < ings.size() && i < iSlots.size(); i++) {
+                int count = i < recipe.ingredientCounts.size() ? recipe.ingredientCounts.get(i) : 1;
+                inv.setItem(iSlots.get(i), createNamedItem(ings.get(i), count));
+            }
         }
         if (!rSlots.isEmpty())
             inv.setItem(rSlots.get(0), createNamedItem(recipe.resultId, recipe.resultCount));
@@ -952,7 +957,7 @@ public class RecipeGUI {
     private Inventory fallbackDetail(String type, CEBridge.RecipeData recipe) {
         Inventory inv = Bukkit.createInventory(null, 27, config.getDetailTitle(type));
         List<String> ings = recipe.ingredientIds;
-        if (!ings.isEmpty()) inv.setItem(11, createNamedItem(ings.get(0), 1));
+        if (!ings.isEmpty()) inv.setItem(11, createNamedItem(ings.get(0), cnt(ings, recipe.ingredientCounts, 0)));
         inv.setItem(15, createNamedItem(recipe.resultId, recipe.resultCount));
         return inv;
     }
@@ -972,13 +977,14 @@ public class RecipeGUI {
         List<Integer> iSlots = charSlots(menu.shape(), 'I');
         List<Integer> rSlots = charSlots(menu.shape(), 'R');
         List<String> ings = recipe.ingredientIds;
+        List<Integer> cnts = recipe.ingredientCounts;
         if (iSlots.size() >= 3) {
-            if (ings.size() >= 2) inv.setItem(iSlots.get(0), createNamedItem(ings.get(1), 1));
-            if (ings.size() >= 1) inv.setItem(iSlots.get(1), createNamedItem(ings.get(0), 1));
-            if (ings.size() >= 3) inv.setItem(iSlots.get(2), createNamedItem(ings.get(2), 1));
+            if (ings.size() >= 2) inv.setItem(iSlots.get(0), createNamedItem(ings.get(1), cnt(ings, cnts, 1)));
+            if (ings.size() >= 1) inv.setItem(iSlots.get(1), createNamedItem(ings.get(0), cnt(ings, cnts, 0)));
+            if (ings.size() >= 3) inv.setItem(iSlots.get(2), createNamedItem(ings.get(2), cnt(ings, cnts, 2)));
         } else {
             for (int i = 0; i < ings.size() && i < iSlots.size(); i++)
-                inv.setItem(iSlots.get(i), createNamedItem(ings.get(i), 1));
+                inv.setItem(iSlots.get(i), createNamedItem(ings.get(i), cnt(ings, cnts, i)));
         }
         if (!rSlots.isEmpty())
             inv.setItem(rSlots.get(0), createNamedItem(recipe.resultId, recipe.resultCount));
@@ -993,7 +999,7 @@ public class RecipeGUI {
         List<Integer> rSlots = charSlots(menu.shape(), 'R');
         List<String> ings = recipe.ingredientIds;
         if (!ings.isEmpty() && !iSlots.isEmpty())
-            inv.setItem(iSlots.get(0), createNamedItem(ings.get(0), 1));
+            inv.setItem(iSlots.get(0), createNamedItem(ings.get(0), cnt(ings, recipe.ingredientCounts, 0)));
         if (!rSlots.isEmpty())
             inv.setItem(rSlots.get(0), createNamedItem(recipe.resultId, recipe.resultCount));
         return inv;
@@ -1006,9 +1012,10 @@ public class RecipeGUI {
         List<Integer> iSlots = charSlots(menu.shape(), 'I');
         List<Integer> rSlots = charSlots(menu.shape(), 'R');
         List<String> ings = recipe.ingredientIds;
+        List<Integer> cnts = recipe.ingredientCounts;
         if (ings.size() >= 2 && iSlots.size() >= 2) {
-            inv.setItem(iSlots.get(0), createNamedItem(ings.get(1), 1));
-            inv.setItem(iSlots.get(1), createNamedItem(ings.get(0), 1));
+            inv.setItem(iSlots.get(0), createNamedItem(ings.get(1), cnt(ings, cnts, 1)));
+            inv.setItem(iSlots.get(1), createNamedItem(ings.get(0), cnt(ings, cnts, 0)));
         }
         if (!rSlots.isEmpty())
             inv.setItem(rSlots.get(0), createNamedItem(recipe.resultId, recipe.resultCount));
@@ -1215,6 +1222,12 @@ public class RecipeGUI {
 
     private ItemStack createNamedItem(String itemId, int count) {
         return bridge.buildItemStack(itemId, Math.max(1, Math.min(count, 64)));
+    }
+
+    /** 安全获取原料数量 */
+    private static int cnt(List<String> ids, List<Integer> counts, int index) {
+        if (counts != null && index < counts.size()) return counts.get(index);
+        return 1;
     }
 
     private ItemStack createRecipeEntryIcon(CEBridge.RecipeData recipe, int recipeCount) {

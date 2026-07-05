@@ -174,11 +174,18 @@ public final class ALCERecipeViewer extends JavaPlugin {
                     }
                 }
                 List<String> ids = ingIds != null ? ingIds : List.of();
+                // 加载 pattern 原料数量（插件 v1.0.4+ 新增）
+                Map<String, Integer> patternKeyCnts = null;
+                org.bukkit.configuration.ConfigurationSection pkcSec = yaml.getConfigurationSection(key + ".pattern_key_counts");
+                if (pkcSec != null && shaped) {
+                    patternKeyCnts = new LinkedHashMap<>();
+                    for (String k : pkcSec.getKeys(false)) patternKeyCnts.put(k, pkcSec.getInt(k, 1));
+                }
                 list.add(new CEBridge.RecipeData(key, type, result, count,
                         ids,
                         ingCounts != null ? ingCounts : List.of(),
                         allIngIds,
-                        shapedArr, patternKeys, cookTime, (float) exp));
+                        shapedArr, patternKeys, patternKeyCnts, cookTime, (float) exp));
                 // 按当前语言加载对应的名字缓存
                 String lang = configManager.getLanguage();
                 String name = yaml.getString(key + ".name_" + lang, "");
@@ -221,6 +228,10 @@ public final class ALCERecipeViewer extends JavaPlugin {
                     if (r.patternKeyIds != null) {
                         for (Map.Entry<String, String> pk : r.patternKeyIds.entrySet())
                             yaml.set(path + "pattern_keys." + pk.getKey(), pk.getValue());
+                    }
+                    if (r.patternKeyCounts != null && !r.patternKeyCounts.isEmpty()) {
+                        for (Map.Entry<String, Integer> pk : r.patternKeyCounts.entrySet())
+                            yaml.set(path + "pattern_key_counts." + pk.getKey(), pk.getValue());
                     }
                 }
             }
