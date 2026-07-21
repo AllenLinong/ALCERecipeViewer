@@ -12,6 +12,7 @@ import org.bukkit.Material;
 import org.bukkit.SoundCategory;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.CraftItemEvent;
@@ -22,6 +23,7 @@ import org.bukkit.event.inventory.PrepareItemCraftEvent;
 import org.bukkit.event.inventory.PrepareSmithingEvent;
 import org.bukkit.event.inventory.SmithItemEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.*;
 
@@ -40,21 +42,22 @@ public class GUIListener implements Listener {
         this.config = plugin.getConfigManager();
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
 
         String guiType = gui.getGUIType(player.getUniqueId());
         if (guiType.isEmpty()) return;
+        int raw = event.getRawSlot();
+        int topSize = event.getView().getTopInventory().getSize();
 
         // 配方详情 GUI：取消点击，但检查导航按钮
         if (RecipeGUI.TYPE_DETAIL.equals(guiType)) {
             event.setCancelled(true);
-            int slot = event.getSlot();
-            if (slot >= 0) {
+            if (raw >= 0 && raw < topSize) {
                 MenuDef detailMenu = gui.getPlayerMenuDef(player.getUniqueId());
                 if (detailMenu != null) {
-                    ButtonDef btn = MenuConfig.buttonAt(detailMenu, slot);
+                    ButtonDef btn = MenuConfig.buttonAt(detailMenu, raw);
                     if (btn != null) {
                         playButtonSound(player, btn);
                         switch (btn.action()) {
@@ -76,30 +79,41 @@ public class GUIListener implements Listener {
 
         // creator：Paper 1.21 原生拖拽模式（参照 KitEditorListener）
         if ("creator".equals(guiType)) {
-            int raw = event.getRawSlot();
-            int topSize = event.getView().getTopInventory().getSize();
-            if (raw >= topSize) return; // 玩家背包 → 放行
-            if (raw < 0) return;
-            // top inventory: 只拦截按钮，其余放行
+            if (raw < 0) {
+                event.setCancelled(true);
+                return;
+            }
+            if (raw >= topSize) {
+                // 阻止 Shift/数字键等把背包物品自动塞进顶部空槽。
+                if (event.isShiftClick()
+                        || event.getClick() == ClickType.NUMBER_KEY
+                        || event.getClick() == ClickType.SWAP_OFFHAND
+                        || event.getClick() == ClickType.DOUBLE_CLICK
+                        || event.getClick() == ClickType.DROP
+                        || event.getClick() == ClickType.CONTROL_DROP) {
+                    event.setCancelled(true);
+                }
+                return;
+            }
+            // top inventory: 只放行创建器声明过的动态输入槽。
             MenuDef menu = getCreatorMenu(player);
             if (menu != null) {
                 ButtonDef btn = MenuConfig.buttonAt(menu, raw);
-                if (btn != null && !btn.action().isEmpty()) {
+                if (btn == null || !btn.dynamic()) {
                     event.setCancelled(true);
-                    handleCreatorAction(player, event, btn);
-                } else if (btn != null && !btn.dynamic()) {
-                    event.setCancelled(true); // 玻璃/装饰 → 保护
+                    if (btn != null && !btn.action().isEmpty()) {
+                        handleCreatorAction(player, event, btn);
+                    }
                 }
                 // I/R dynamic → 不取消，Paper 原生处理
+            } else {
+                event.setCancelled(true);
             }
             return;
         }
         if ("creator_type".equals(guiType)) {
-            int raw = event.getRawSlot();
-            int topSize = event.getView().getTopInventory().getSize();
-            if (raw >= topSize) return; // 玩家背包 → 放行
-            if (raw < 0) return;
             event.setCancelled(true);
+            if (raw >= topSize || raw < 0) return;
             MenuDef menu = plugin.getMenuConfig().getRecipeCreatorType();
             if (menu != null) {
                 ButtonDef btn = MenuConfig.buttonAt(menu, raw);
@@ -110,8 +124,6 @@ public class GUIListener implements Listener {
 
         // 主菜单/配方列表：拦截所有点击，防止物品进出 GUI
         event.setCancelled(true);
-        int raw = event.getRawSlot();
-        int topSize = event.getView().getTopInventory().getSize();
         if (raw >= topSize || raw < 0) return; // 玩家背包 → 不处理按钮逻辑
 
         if (event.getCurrentItem() == null || event.getCurrentItem().getType() == Material.AIR) return;
@@ -125,7 +137,7 @@ public class GUIListener implements Listener {
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onInventoryDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         String type = gui.getGUIType(player.getUniqueId());
@@ -137,18 +149,18 @@ public class GUIListener implements Listener {
             MenuDef menu = getCreatorMenu(player);
             if (menu != null) {
                 for (int raw : event.getRawSlots()) {
-                    if (raw < topSize) {
-                        ButtonDef btn = MenuConfig.buttonAt(menu, raw);
-                        if (btn != null && !btn.dynamic()) { event.setCancelled(true); return; }
+                    if (raw >= topSize || !isCreatorInputSlot(menu, raw)) {
+                        event.setCancelled(true);
+                        return;
                     }
                 }
+            } else {
+                event.setCancelled(true);
             }
             return;
         }
-        // 浏览 GUI：只拦截顶部 inventory 拖拽，放行背包
-        for (int raw : event.getRawSlots()) {
-            if (raw < topSize) { event.setCancelled(true); return; }
-        }
+        // 浏览/详情 GUI：顶部菜单和底部背包都不允许拖动物品。
+        event.setCancelled(true);
     }
 
     /** 阻止原版配方书在工作台/熔炉/锻造台详情 GUI 中填充物品 */
@@ -204,6 +216,11 @@ public class GUIListener implements Listener {
             } else {
                 gui.removePlayer(player.getUniqueId());
             }
+        } else if ("creator".equals(type)) {
+            if (!gui.pendingExpInput.containsKey(player.getUniqueId())) {
+                returnCreatorItems(player, closed);
+            }
+            gui.removePlayer(player.getUniqueId());
         } else {
             gui.removePlayer(player.getUniqueId());
         }
@@ -323,22 +340,6 @@ public class GUIListener implements Listener {
         }
     }
 
-    @EventHandler
-    public void onCreatorClose(InventoryCloseEvent event) {
-        if (!(event.getPlayer() instanceof Player player)) return;
-        String type = gui.getGUIType(player.getUniqueId());
-        if ("creator_type".equals(type)) {
-            gui.getGUITypeMap().remove(player.getUniqueId());
-            gui.getOpenInventoryMap().remove(player.getUniqueId());
-            return;
-        }
-        if (!"creator".equals(type)) return;
-        // 经验输入关闭不保存
-        if (gui.pendingExpInput.containsKey(player.getUniqueId())) return;
-        // ESC 关闭不保存，只清理状态
-        gui.removePlayer(player.getUniqueId());
-    }
-
     private void handleSearchClick(Player player, String categoryId, InventoryClickEvent event) {
         ClickType click = event.getClick();
         if (click == ClickType.SHIFT_LEFT) {
@@ -395,6 +396,7 @@ public class GUIListener implements Listener {
             }
             case "SAVE_RECIPE" -> {
                 gui.saveCreatorRecipe(player);
+                returnCreatorItems(player, gui.getOpenInventory(player.getUniqueId()));
                 String cat = gui.getPlayerCategory(player.getUniqueId());
                 int page = gui.getPlayerPage(player.getUniqueId());
                 gui.removePlayer(player.getUniqueId());
@@ -407,6 +409,30 @@ public class GUIListener implements Listener {
     }
 
     // ========== 辅助 ==========
+
+    private boolean isCreatorInputSlot(MenuDef menu, int rawSlot) {
+        if (menu == null || rawSlot < 0) return false;
+        ButtonDef btn = MenuConfig.buttonAt(menu, rawSlot);
+        return btn != null && btn.dynamic();
+    }
+
+    private void returnCreatorItems(Player player, Inventory inv) {
+        if (inv == null) return;
+        MenuDef menu = getCreatorMenu(player);
+        if (menu == null) return;
+
+        for (int slot = 0; slot < inv.getSize(); slot++) {
+            if (!isCreatorInputSlot(menu, slot)) continue;
+            ItemStack item = inv.getItem(slot);
+            if (item == null || item.getType().isAir()) continue;
+
+            inv.setItem(slot, null);
+            Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
+            for (ItemStack leftover : leftovers.values()) {
+                player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+            }
+        }
+    }
 
     // ========== 调试 ==========
 
