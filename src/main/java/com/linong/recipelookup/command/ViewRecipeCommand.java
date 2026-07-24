@@ -65,7 +65,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         }
         plugin.getFoliaLib().getScheduler().runAsync(task -> {
             plugin.reloadRecipes();
-            plugin.getFoliaLib().getScheduler().runNextTick(t -> {
+            plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
                 int total = plugin.getLoadedRecipes().values().stream()
                         .mapToInt(List::size).sum();
                 player.sendMessage(config.getPluginPrefix() + " " + config.getCmdReloaded(total));

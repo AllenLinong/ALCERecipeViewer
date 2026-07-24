@@ -9,14 +9,17 @@ import com.linong.recipelookup.bridge.CEBridge;
 import com.tcoded.folialib.wrapper.task.WrappedTask;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.text.Collator;
 import java.util.*;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -35,30 +38,39 @@ public class RecipeGUI {
     private final CEBridge bridge;
     private final ConfigManager config;
     private final MenuConfig menuConfig;
+    private final NamespacedKey guiItemKey;
 
-    private final Map<UUID, String> guiType = new HashMap<>();
-    private final Map<UUID, String> playerCategory = new HashMap<>();
-    private final Map<UUID, Integer> playerPage = new HashMap<>();
-    private final Map<UUID, String> searchQuery = new HashMap<>();
-    private final Map<UUID, String> searchMode = new HashMap<>();
-    private final Map<UUID, Inventory> openInventories = new HashMap<>();
-    private final Map<UUID, MenuDef> playerMenuDef = new HashMap<>();
+    private final Map<UUID, String> guiType = new ConcurrentHashMap<>();
+    private final Map<UUID, String> playerCategory = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> playerPage = new ConcurrentHashMap<>();
+    private final Map<UUID, String> searchQuery = new ConcurrentHashMap<>();
+    private final Map<UUID, String> searchMode = new ConcurrentHashMap<>();
+    private final Map<UUID, Inventory> openInventories = new ConcurrentHashMap<>();
+    private final Map<UUID, MenuDef> playerMenuDef = new ConcurrentHashMap<>();
     /** 缓存排序后的配方列表，避免点击时重复排序 */
-    private final Map<UUID, List<CEBridge.RecipeData>> playerRecipes = new HashMap<>();
+    private final Map<UUID, List<CEBridge.RecipeData>> playerRecipes = new ConcurrentHashMap<>();
     /** 多配方轮播：resultId → 该结果物品的所有配方 */
-    private final Map<String, List<CEBridge.RecipeData>> resultRecipeGroups = new HashMap<>();
+    private final Map<UUID, Map<String, List<CEBridge.RecipeData>>> playerResultRecipeGroups = new ConcurrentHashMap<>();
     /** 多配方轮播：玩家当前查看的配方组 */
-    private final Map<UUID, List<CEBridge.RecipeData>> playerRecipeGroup = new HashMap<>();
+    private final Map<UUID, List<CEBridge.RecipeData>> playerRecipeGroup = new ConcurrentHashMap<>();
     /** 多配方轮播：玩家当前配方组中的索引 */
-    private final Map<UUID, Integer> playerRecipeIndex = new HashMap<>();
+    private final Map<UUID, Integer> playerRecipeIndex = new ConcurrentHashMap<>();
     /** 多配方轮播：已调度的轮播任务（可取消） */
-    private final Map<UUID, WrappedTask> playerCycleTask = new HashMap<>();
+    private final Map<UUID, WrappedTask> playerCycleTask = new ConcurrentHashMap<>();
 
     public RecipeGUI(ALCERecipeViewer plugin) {
         this.plugin = plugin;
         this.bridge = plugin.getCEBridge();
         this.config = plugin.getConfigManager();
         this.menuConfig = plugin.getMenuConfig();
+        this.guiItemKey = new NamespacedKey(plugin, "gui_display_item");
+    }
+
+    private Inventory createGUIInventory(UUID owner, String type, int size, String title) {
+        RecipeGUIHolder holder = new RecipeGUIHolder(owner, type);
+        Inventory inventory = Bukkit.createInventory(holder, size, title);
+        holder.bind(inventory);
+        return inventory;
     }
 
     public Locale resolveLocale() {
@@ -77,7 +89,8 @@ public class RecipeGUI {
         if (menu == null) return;
 
         int size = MenuConfig.shapeSize(menu.shape());
-        Inventory inv = Bukkit.createInventory(null, size, menu.title());
+        UUID uuid = player.getUniqueId();
+        Inventory inv = createGUIInventory(uuid, TYPE_MAIN, size, menu.title());
 
         for (int row = 0; row < menu.shape().length; row++) {
             String line = menu.shape()[row];
@@ -100,13 +113,13 @@ public class RecipeGUI {
             }
         }
 
-        UUID uuid = player.getUniqueId();
-        player.openInventory(inv);
         guiType.put(uuid, TYPE_MAIN);
         playerCategory.remove(uuid);
         playerPage.remove(uuid);
-        playerMenuDef.put(uuid, menu);
+        if (menu != null) playerMenuDef.put(uuid, menu);
+        else playerMenuDef.remove(uuid);
         openInventories.put(uuid, inv);
+        player.openInventory(inv);
     }
 
     // ===================== 配方列表 =====================
@@ -141,7 +154,8 @@ public class RecipeGUI {
         }
 
         int size = MenuConfig.shapeSize(menu.shape());
-        Inventory inv = Bukkit.createInventory(null, size, title);
+        UUID uuid = player.getUniqueId();
+        Inventory inv = createGUIInventory(uuid, TYPE_LIST, size, title);
 
         int recipeIdx = page * pageSize;
         for (int row = 0; row < menu.shape().length; row++) {
@@ -155,7 +169,9 @@ public class RecipeGUI {
                 if (c == 'I') {
                     if (recipeIdx < recipes.size()) {
                         CEBridge.RecipeData rec = recipes.get(recipeIdx);
-                        List<CEBridge.RecipeData> group = resultRecipeGroups.get(rec.resultId);
+                        Map<String, List<CEBridge.RecipeData>> groups = playerResultRecipeGroups
+                                .getOrDefault(player.getUniqueId(), Map.of());
+                        List<CEBridge.RecipeData> group = groups.get(rec.resultId);
                         int multiCount = group != null ? group.size() : 1;
                         inv.setItem(slot, createRecipeEntryIcon(rec, multiCount));
                         recipeIdx++;
@@ -178,14 +194,14 @@ public class RecipeGUI {
             }
         }
 
-        UUID uuid = player.getUniqueId();
-        player.openInventory(inv);
         guiType.put(uuid, TYPE_LIST);
         playerCategory.put(uuid, categoryId);
         playerPage.put(uuid, page);
-        playerMenuDef.put(uuid, menu);
+        if (menu != null) playerMenuDef.put(uuid, menu);
+        else playerMenuDef.remove(uuid);
         openInventories.put(uuid, inv);
         playerRecipes.put(uuid, recipes); // 缓存排序结果
+        player.openInventory(inv);
     }
 
     public void openFilteredRecipeList(Player player, String categoryId, List<CEBridge.RecipeData> filtered, String query) {
@@ -204,8 +220,7 @@ public class RecipeGUI {
             groups.computeIfAbsent(r.resultId, k -> new ArrayList<>()).add(r);
         }
         // 缓存当前分类的配方组（用于后续详情页轮播）
-        resultRecipeGroups.clear();
-        resultRecipeGroups.putAll(groups);
+        playerResultRecipeGroups.put(uuid, Collections.unmodifiableMap(new LinkedHashMap<>(groups)));
         // 去重：每个 resultId 只保留一项
         List<CEBridge.RecipeData> deduped = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -229,20 +244,20 @@ public class RecipeGUI {
 
     // ===================== 新增配方 GUI（管理员）=====================
 
-    public final Map<UUID, String> creatorType = new HashMap<>();
-    private final Map<UUID, Integer> creatorTime = new HashMap<>();
-    private final Map<UUID, Integer> creatorFurnaceTime = new HashMap<>();
-    private final Map<UUID, Integer> creatorExp = new HashMap<>();
+    public final Map<UUID, String> creatorType = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> creatorTime = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> creatorFurnaceTime = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> creatorExp = new ConcurrentHashMap<>();
     /** 烧炼模式: "both" | "furnace" | "blast" */
-    private final Map<UUID, String> creatorFurnaceMode = new HashMap<>();
+    private final Map<UUID, String> creatorFurnaceMode = new ConcurrentHashMap<>();
 
-    public final Map<UUID, String> pendingExpInput = new HashMap<>();
+    public final Map<UUID, String> pendingExpInput = new ConcurrentHashMap<>();
 
-    private final Map<UUID, String> savedCreatorType = new HashMap<>();
-    private final Map<UUID, ItemStack[]> savedCreatorItems = new HashMap<>();
-    private final Map<UUID, Integer> savedCreatorExpVal = new HashMap<>();
-    private final Map<UUID, Integer> savedCreatorTimeVal = new HashMap<>();
-    private final Map<UUID, Integer> savedCreatorFurnaceTimeVal = new HashMap<>();
+    private final Map<UUID, String> savedCreatorType = new ConcurrentHashMap<>();
+    private final Map<UUID, ItemStack[]> savedCreatorItems = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> savedCreatorExpVal = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> savedCreatorTimeVal = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> savedCreatorFurnaceTimeVal = new ConcurrentHashMap<>();
 
     public void expectExpInput(Player player) {
         UUID uuid = player.getUniqueId();
@@ -291,7 +306,7 @@ public class RecipeGUI {
         final int savedTime = savedTimeObj != null ? savedTimeObj : creatorTime.getOrDefault(uuid, 5);
         final int savedFurnaceTime = savedFurnaceTimeObj != null ? savedFurnaceTimeObj : creatorFurnaceTime.getOrDefault(uuid, 10);
         final ItemStack[] items = savedCreatorItems.remove(uuid);
-        plugin.getFoliaLib().getScheduler().runNextTick(t -> {
+        plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
             if ("creator".equals(guiType.get(uuid))) return;
             openRecipeCreator(player, type);
             if (items != null) {
@@ -373,10 +388,10 @@ public class RecipeGUI {
         MenuDef menu = menuConfig.getRecipeCreatorType();
         if (menu == null) return;
         UUID uuid = player.getUniqueId();
-        Inventory inv = buildSimpleGUI(menu);
-        player.openInventory(inv);
+        Inventory inv = buildSimpleGUI(menu, uuid, "creator_type");
         guiType.put(uuid, "creator_type");
         openInventories.put(uuid, inv);
+        player.openInventory(inv);
     }
 
     public void openRecipeCreator(Player player, String type) {
@@ -404,10 +419,10 @@ public class RecipeGUI {
         }
         creatorExp.put(uuid, 10);
         Inventory inv = buildCreatorGUI(menu, uuid);
-        player.openInventory(inv);
         guiType.put(uuid, "creator");
         creatorType.put(uuid, type != null ? type : "crafting");
         openInventories.put(uuid, inv);
+        player.openInventory(inv);
     }
 
     public void adjustCreatorValue(Player player, String slotChar, boolean increase) {
@@ -458,7 +473,7 @@ public class RecipeGUI {
     }
 
     private Inventory buildCreatorGUI(MenuDef menu, UUID uuid) {
-        Inventory inv = Bukkit.createInventory(null, MenuConfig.shapeSize(menu.shape()), menu.title());
+        Inventory inv = createGUIInventory(uuid, "creator", MenuConfig.shapeSize(menu.shape()), menu.title());
         for (int row = 0; row < menu.shape().length; row++) {
             String line = menu.shape()[row];
             for (int col = 0; col < line.length() && col < 9; col++) {
@@ -518,7 +533,7 @@ public class RecipeGUI {
             meta.setLore(lore);
             item.setItemMeta(meta);
         }
-        return item;
+        return markGUIItem(item);
     }
 
     public void toggleFurnaceMode(Player player, org.bukkit.event.inventory.ClickType click) {
@@ -550,8 +565,8 @@ public class RecipeGUI {
         }
     }
 
-    private Inventory buildSimpleGUI(MenuDef menu) {
-        Inventory inv = Bukkit.createInventory(null, MenuConfig.shapeSize(menu.shape()), menu.title());
+    private Inventory buildSimpleGUI(MenuDef menu, UUID owner, String type) {
+        Inventory inv = createGUIInventory(owner, type, MenuConfig.shapeSize(menu.shape()), menu.title());
         for (int row = 0; row < menu.shape().length; row++) {
             String line = menu.shape()[row];
             for (int col = 0; col < line.length() && col < 9; col++) {
@@ -789,11 +804,11 @@ public class RecipeGUI {
                     fw.write("\n" + yamlContent);
                 }
             } catch (Exception e) {
-                plugin.getFoliaLib().getScheduler().runNextTick(t ->
+                plugin.getFoliaLib().getScheduler().runAtEntity(player, t ->
                     player.sendMessage(config.getPluginPrefix() + " §c保存失败: " + e.getMessage()));
                 return;
             }
-            plugin.getFoliaLib().getScheduler().runNextTick(t -> {
+            plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
                 player.sendMessage(config.getPluginPrefix() + " " + config.getCreatorSaved(recipeFilePath));
                 player.sendMessage(config.getPluginPrefix() + " " + config.getCreatorReload1());
                 player.sendMessage(config.getPluginPrefix() + " " + config.getCreatorReload2());
@@ -869,7 +884,7 @@ public class RecipeGUI {
         playerRecipeIndex.put(uuid, index);
 
         // 构建并打开详情 GUI
-        Inventory inv = buildDetailInventory(recipe, group, index);
+        Inventory inv = buildDetailInventory(recipe, group, index, uuid);
         MenuDef menu = getDetailMenu(recipe.type);
 
         // 必须在 openInventory 之前更新状态，否则关闭事件处理器
@@ -877,7 +892,8 @@ public class RecipeGUI {
         guiType.put(uuid, TYPE_DETAIL);
         playerCategory.put(uuid, categoryId);
         playerPage.put(uuid, listPage);
-        playerMenuDef.put(uuid, menu);
+        if (menu != null) playerMenuDef.put(uuid, menu);
+        else playerMenuDef.remove(uuid);
         openInventories.put(uuid, inv);
 
         player.openInventory(inv);
@@ -888,18 +904,18 @@ public class RecipeGUI {
         }
     }
 
-    private Inventory createCraftingTableGUI(CEBridge.RecipeData recipe) {
+    private Inventory createCraftingTableGUI(CEBridge.RecipeData recipe, UUID owner) {
         MenuDef menu = menuConfig.getDetailCrafting();
-        if (menu == null) return fallbackDetail("crafting", recipe);
-        Inventory inv = buildDetailGUI(menu);
+        if (menu == null) return fallbackDetail("crafting", recipe, owner);
+        Inventory inv = buildDetailGUI(menu, owner);
         fillDetailSlots(inv, menu, recipe);
         return inv;
     }
 
-    private Inventory createFurnaceGUI(CEBridge.RecipeData recipe) {
+    private Inventory createFurnaceGUI(CEBridge.RecipeData recipe, UUID owner) {
         MenuDef menu = menuConfig.getDetailFurnace();
-        if (menu == null) return fallbackDetail("furnace", recipe);
-        Inventory inv = buildDetailGUI(menu);
+        if (menu == null) return fallbackDetail("furnace", recipe, owner);
+        Inventory inv = buildDetailGUI(menu, owner);
         fillDetailSlots(inv, menu, recipe);
         List<Integer> hSlots = charSlots(menu.shape(), 'H');
         if (!hSlots.isEmpty()) {
@@ -954,8 +970,8 @@ public class RecipeGUI {
             inv.setItem(rSlots.get(0), createNamedItem(recipe.resultId, recipe.resultCount));
     }
 
-    private Inventory fallbackDetail(String type, CEBridge.RecipeData recipe) {
-        Inventory inv = Bukkit.createInventory(null, 27, config.getDetailTitle(type));
+    private Inventory fallbackDetail(String type, CEBridge.RecipeData recipe, UUID owner) {
+        Inventory inv = createGUIInventory(owner, TYPE_DETAIL, 27, config.getDetailTitle(type));
         List<String> ings = recipe.ingredientIds;
         if (!ings.isEmpty()) inv.setItem(11, createNamedItem(ings.get(0), cnt(ings, recipe.ingredientCounts, 0)));
         inv.setItem(15, createNamedItem(recipe.resultId, recipe.resultCount));
@@ -970,10 +986,10 @@ public class RecipeGUI {
         return sec > 0 ? min + "分" + sec + "秒" : min + "分钟";
     }
 
-    private Inventory createSmithingTableGUI(CEBridge.RecipeData recipe) {
+    private Inventory createSmithingTableGUI(CEBridge.RecipeData recipe, UUID owner) {
         MenuDef menu = menuConfig.getDetailSmithing();
-        if (menu == null) return Bukkit.createInventory(null, 27, config.getDetailTitle("smithing"));
-        Inventory inv = buildDetailGUI(menu);
+        if (menu == null) return fallbackDetail("smithing", recipe, owner);
+        Inventory inv = buildDetailGUI(menu, owner);
         List<Integer> iSlots = charSlots(menu.shape(), 'I');
         List<Integer> rSlots = charSlots(menu.shape(), 'R');
         List<String> ings = recipe.ingredientIds;
@@ -991,10 +1007,10 @@ public class RecipeGUI {
         return inv;
     }
 
-    private Inventory createStonecutterGUI(CEBridge.RecipeData recipe) {
+    private Inventory createStonecutterGUI(CEBridge.RecipeData recipe, UUID owner) {
         MenuDef menu = menuConfig.getDetailStonecutter();
-        if (menu == null) return Bukkit.createInventory(null, 27, config.getDetailTitle("stonecutting"));
-        Inventory inv = buildDetailGUI(menu);
+        if (menu == null) return fallbackDetail("stonecutting", recipe, owner);
+        Inventory inv = buildDetailGUI(menu, owner);
         List<Integer> iSlots = charSlots(menu.shape(), 'I');
         List<Integer> rSlots = charSlots(menu.shape(), 'R');
         List<String> ings = recipe.ingredientIds;
@@ -1005,10 +1021,10 @@ public class RecipeGUI {
         return inv;
     }
 
-    private Inventory createBrewingGUI(CEBridge.RecipeData recipe) {
+    private Inventory createBrewingGUI(CEBridge.RecipeData recipe, UUID owner) {
         MenuDef menu = menuConfig.getDetailBrewing();
-        if (menu == null) return fallbackDetail("brewing", recipe);
-        Inventory inv = buildDetailGUI(menu);
+        if (menu == null) return fallbackDetail("brewing", recipe, owner);
+        Inventory inv = buildDetailGUI(menu, owner);
         List<Integer> iSlots = charSlots(menu.shape(), 'I');
         List<Integer> rSlots = charSlots(menu.shape(), 'R');
         List<String> ings = recipe.ingredientIds;
@@ -1036,16 +1052,16 @@ public class RecipeGUI {
     }
 
     /** 构建详情 GUI（含导航按钮） */
-    private Inventory buildDetailInventory(CEBridge.RecipeData recipe, List<CEBridge.RecipeData> group, int index) {
+    private Inventory buildDetailInventory(CEBridge.RecipeData recipe, List<CEBridge.RecipeData> group, int index, UUID owner) {
         Inventory inv;
         MenuDef menu = getDetailMenu(recipe.type);
         switch (recipe.type) {
-            case "crafting" -> inv = createCraftingTableGUI(recipe);
-            case "smithing"  -> inv = createSmithingTableGUI(recipe);
-            case "smelting", "blasting", "smoking", "campfire_cooking" -> inv = createFurnaceGUI(recipe);
-            case "stonecutting" -> inv = createStonecutterGUI(recipe);
-            case "brewing" -> inv = createBrewingGUI(recipe);
-            default -> inv = createCraftingTableGUI(recipe);
+            case "crafting" -> inv = createCraftingTableGUI(recipe, owner);
+            case "smithing"  -> inv = createSmithingTableGUI(recipe, owner);
+            case "smelting", "blasting", "smoking", "campfire_cooking" -> inv = createFurnaceGUI(recipe, owner);
+            case "stonecutting" -> inv = createStonecutterGUI(recipe, owner);
+            case "brewing" -> inv = createBrewingGUI(recipe, owner);
+            default -> inv = createCraftingTableGUI(recipe, owner);
         }
 
         // 设置导航按钮（上一个/下一个配方）
@@ -1058,7 +1074,7 @@ public class RecipeGUI {
             String title = menu.title() + " §8(" + (index + 1) + "/" + group.size() + ")";
             // 通过反射或重建 inventory 来更新标题...实际上 Bukkit 不支持直接改标题
             // 这里我们重新构建一个带新标题的 inventory
-            Inventory newInv = Bukkit.createInventory(null, inv.getSize(), title);
+            Inventory newInv = createGUIInventory(owner, TYPE_DETAIL, inv.getSize(), title);
             newInv.setContents(inv.getContents());
             return newInv;
         }
@@ -1086,16 +1102,20 @@ public class RecipeGUI {
         Integer index = playerRecipeIndex.get(uuid);
         if (group == null || index == null || index < 0 || index >= group.size()) return;
 
+        Inventory current = openInventories.get(uuid);
+        if (current == null || player.getOpenInventory().getTopInventory() != current) {
+            removePlayer(uuid);
+            return;
+        }
+
         CEBridge.RecipeData recipe = group.get(index);
-        Inventory inv = buildDetailInventory(recipe, group, index);
+        Inventory rendered = buildDetailInventory(recipe, group, index, uuid);
         MenuDef menu = getDetailMenu(recipe.type);
 
-        // 必须在 openInventory 之前更新状态，否则关闭事件处理器
-        // 会误判旧物品栏仍属于本插件，从而调度 openRecipeList 覆盖详情页
-        openInventories.put(uuid, inv);
-        playerMenuDef.put(uuid, menu);
-
-        player.openInventory(inv);
+        if (menu != null) playerMenuDef.put(uuid, menu);
+        else playerMenuDef.remove(uuid);
+        current.setContents(rendered.getContents());
+        player.updateInventory();
     }
 
     /** 手动切换配方（direction: -1 上一页, +1 下一页） */
@@ -1124,8 +1144,7 @@ public class RecipeGUI {
         // 先取消旧的轮播任务
         stopRecipeCycle(player);
 
-        // runLater(Runnable, ticks) → 主线程延迟执行，返回可取消的 WrappedTask
-        WrappedTask task = plugin.getFoliaLib().getScheduler().runLater(() -> {
+        WrappedTask task = plugin.getFoliaLib().getScheduler().runAtEntityLater(player, () -> {
             // 已离开详情页 → 不再轮播
             if (!TYPE_DETAIL.equals(guiType.getOrDefault(uuid, ""))) return;
 
@@ -1139,13 +1158,18 @@ public class RecipeGUI {
 
             Player p = Bukkit.getPlayer(uuid);
             if (p != null && p.isOnline()) {
+                Inventory current = openInventories.get(uuid);
+                if (current == null || p.getOpenInventory().getTopInventory() != current) {
+                    removePlayer(uuid);
+                    return;
+                }
                 refreshDetailGUI(p);
                 // 继续下一轮
                 scheduleRecipeCycle(p, config.getMultiRecipeCycleSeconds());
             }
         }, delaySeconds * 20L);
 
-        playerCycleTask.put(uuid, task);
+        if (task != null) playerCycleTask.put(uuid, task);
     }
 
     /** 停止自动轮播 */
@@ -1167,8 +1191,8 @@ public class RecipeGUI {
         playerRecipeIndex.remove(uuid);
     }
 
-    private Inventory buildDetailGUI(MenuDef menu) {
-        Inventory inv = Bukkit.createInventory(null, MenuConfig.shapeSize(menu.shape()), menu.title());
+    private Inventory buildDetailGUI(MenuDef menu, UUID owner) {
+        Inventory inv = createGUIInventory(owner, TYPE_DETAIL, MenuConfig.shapeSize(menu.shape()), menu.title());
         for (int row = 0; row < menu.shape().length; row++) {
             String line = menu.shape()[row];
             for (int col = 0; col < line.length() && col < 9; col++) {
@@ -1201,10 +1225,34 @@ public class RecipeGUI {
                     meta.setLore(lore);
                     item.setItemMeta(meta);
                 }
-                return item;
+                return markGUIItem(item);
             }
         }
-        return menuConfig.buildButton(btn, vars);
+        return markGUIItem(menuConfig.buildButton(btn, vars));
+    }
+
+    private ItemStack markGUIItem(ItemStack item) {
+        if (item == null || item.getType().isAir()) return item;
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.getPersistentDataContainer().set(guiItemKey, PersistentDataType.BYTE, (byte) 1);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    public boolean isGUIItem(ItemStack item) {
+        if (item == null || item.getType().isAir()) return false;
+        ItemMeta meta = item.getItemMeta();
+        return meta != null && meta.getPersistentDataContainer().has(guiItemKey, PersistentDataType.BYTE);
+    }
+
+    public void removeLeakedGUIItems(Player player) {
+        if (isGUIItem(player.getItemOnCursor())) player.setItemOnCursor(null);
+        Inventory inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            if (isGUIItem(inventory.getItem(slot))) inventory.setItem(slot, null);
+        }
     }
 
     private static List<Integer> charSlots(String[] shape, char target) {
@@ -1221,7 +1269,7 @@ public class RecipeGUI {
     // ===================== 物品图标 =====================
 
     private ItemStack createNamedItem(String itemId, int count) {
-        return bridge.buildItemStack(itemId, Math.max(1, Math.min(count, 64)));
+        return markGUIItem(bridge.buildItemStack(itemId, Math.max(1, Math.min(count, 64))));
     }
 
     /** 安全获取原料数量 */
@@ -1246,7 +1294,7 @@ public class RecipeGUI {
             meta.setLore(lore);
             item.setItemMeta(meta);
         }
-        return item;
+        return markGUIItem(item);
     }
 
     // ===================== 搜索过滤 =====================
@@ -1683,7 +1731,18 @@ public class RecipeGUI {
         openRecipeList(player, category, page);
     }
     public Inventory getOpenInventory(UUID uuid) { return openInventories.get(uuid); }
-    public boolean isOurGUI(UUID uuid, Inventory inv) { Inventory t = openInventories.get(uuid); return t != null && t.equals(inv); }
+    public boolean isOurGUI(UUID uuid, Inventory inv) {
+        return inv != null
+                && inv.getHolder() instanceof RecipeGUIHolder holder
+                && holder.owner().equals(uuid);
+    }
+    public boolean isCurrentGUI(UUID uuid, Inventory inv) { return openInventories.get(uuid) == inv; }
+    public String getInventoryType(UUID uuid, Inventory inv) {
+        if (inv != null && inv.getHolder() instanceof RecipeGUIHolder holder && holder.owner().equals(uuid)) {
+            return holder.type();
+        }
+        return "";
+    }
     public Map<UUID, String> getGUITypeMap() { return guiType; }
     public Map<UUID, Inventory> getOpenInventoryMap() { return openInventories; }
     public MenuDef getPlayerMenuDef(UUID uuid) { return playerMenuDef.get(uuid); }
@@ -1698,12 +1757,23 @@ public class RecipeGUI {
         playerMenuDef.remove(uuid);
         openInventories.remove(uuid);
         playerRecipes.remove(uuid);
+        playerResultRecipeGroups.remove(uuid);
         creatorType.remove(uuid);
         creatorTime.remove(uuid);
         creatorFurnaceTime.remove(uuid);
         creatorExp.remove(uuid);
         creatorFurnaceMode.remove(uuid);
         cleanupRecipeCycle(uuid);
+    }
+
+    public void discardPlayer(UUID uuid) {
+        pendingExpInput.remove(uuid);
+        savedCreatorType.remove(uuid);
+        savedCreatorItems.remove(uuid);
+        savedCreatorExpVal.remove(uuid);
+        savedCreatorTimeVal.remove(uuid);
+        savedCreatorFurnaceTimeVal.remove(uuid);
+        removePlayer(uuid);
     }
 
     public void closeAll() {

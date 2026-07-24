@@ -10,6 +10,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -17,8 +18,8 @@ import java.util.stream.Collectors;
  */
 public class ChatSearchListener implements Listener {
 
-    private final Map<UUID, String> waitingSearch = new HashMap<>();
-    private final Map<UUID, String> searchModeStore = new HashMap<>();
+    private final Map<UUID, String> waitingSearch = new ConcurrentHashMap<>();
+    private final Map<UUID, String> searchModeStore = new ConcurrentHashMap<>();
     private final ALCERecipeViewer plugin;
     private final ConfigManager config;
 
@@ -28,9 +29,11 @@ public class ChatSearchListener implements Listener {
     }
 
     public void expectSearch(Player player, String categoryId, String mode) {
+        if (categoryId == null) return;
         UUID uuid = player.getUniqueId();
         waitingSearch.put(uuid, categoryId);
-        searchModeStore.put(uuid, mode);
+        if (mode != null) searchModeStore.put(uuid, mode);
+        else searchModeStore.remove(uuid);
         player.closeInventory();
         player.sendMessage(config.getChatSearchPrompt());
     }
@@ -61,7 +64,7 @@ public class ChatSearchListener implements Listener {
         event.setCancelled(true);
 
         if (msg.equalsIgnoreCase("cancel")) {
-            plugin.getFoliaLib().getScheduler().runNextTick(t -> {
+            plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
                 player.sendMessage(config.getChatSearchCancelled());
                 plugin.getRecipeGUI().openRecipeList(player, categoryId, 0);
             });
@@ -77,7 +80,7 @@ public class ChatSearchListener implements Listener {
                 .filter(r -> matchesQuery(r, q, locale, searchMode))
                 .collect(Collectors.toList());
 
-        plugin.getFoliaLib().getScheduler().runNextTick(t -> {
+        plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
             plugin.getRecipeGUI().openFilteredRecipeList(player, categoryId, filtered, msg);
             player.sendMessage(config.getChatSearchResult(filtered.size()));
         });
