@@ -2,14 +2,19 @@ package com.linong.recipelookup.bridge;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.event.Event;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.Plugin;
 
 import java.io.*;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
@@ -38,12 +43,16 @@ public class CEBridge {
     private Object emptyBuildContext;
     private Method buildItemMethod;
     private Method minecraftItemMethod;
-    // CraftItemStack.asBukkitCopy
+    // Item.platformItem() -> Bukkit ItemStack（由 CE 处理跨版本转换）
+    private Method platformItemMethod;
+    // CraftItemStack.asBukkitCopy，仅用于兼容旧 CE 的最终回退
     private Method asBukkitCopyMethod;
+    private boolean conversionFailureLogged;
     // Item.hoverNameComponent() → Optional<Component>（GUI 显示名）
     private Method itemHoverNameComponentMethod;
     // java.util.Optional.orElse(null)
     private Method optionalOrElseMethod;
+    private Listener reloadListener;
 
     /** CE 配方类型 ID → 分类元数据 */
     public static final Map<String, CategoryMeta> CATEGORIES = new LinkedHashMap<>();
@@ -82,28 +91,55 @@ public class CEBridge {
     public boolean isAvailable() { return available; }
     public Plugin getCEPlugin() { return cePlugin; }
 
+    /** CE 初始化曾失败时供管理命令重试，不需要重启 ALCE。 */
+    public synchronized boolean reconnect() {
+        if (available) return true;
+        if (cePlugin == null || !cePlugin.isEnabled()) return false;
+        try {
+            initReflection();
+            available = true;
+            conversionFailureLogged = false;
+            logger.info("  [OK] CraftEngine » 重新连接成功");
+            return true;
+        } catch (Exception e) {
+            logger.warning("CraftEngine 重新连接失败: " + e.getClass().getSimpleName()
+                    + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 反射注册 CE 的完整重载事件。这样不强绑定 CE 类，
+     * 也能在 CraftEngine 配方真正就绪后刷新数据。
+     */
+    @SuppressWarnings("unchecked")
+    public synchronized boolean registerReloadListener(Plugin owner, Runnable callback) {
+        if (!available || ceLoader == null || reloadListener != null) return false;
+        try {
+            Class<?> rawEvent = Class.forName(
+                    "net.momirealms.craftengine.bukkit.api.event.CraftEngineReloadEvent",
+                    true, ceLoader);
+            if (!Event.class.isAssignableFrom(rawEvent)) return false;
+            Class<? extends Event> eventClass = (Class<? extends Event>) rawEvent;
+            Listener listener = new Listener() {};
+            Bukkit.getPluginManager().registerEvent(
+                    eventClass, listener, EventPriority.MONITOR,
+                    (registered, event) -> callback.run(), owner, true);
+            this.reloadListener = listener;
+            logger.info("  [OK] CE 重载事件 » 已监听");
+            return true;
+        } catch (ReflectiveOperationException | LinkageError e) {
+            logger.info("CE 重载事件不可用，将使用延迟重试: "
+                    + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
     // ==================== 反射初始化 ====================
 
     private void initReflection() throws Exception {
-        // 获取真正的 CraftEngine 实例
-        // CE 在 Paper 上使用 PaperCraftEnginePlugin 作为壳 → bootstrap.plugin → BukkitCraftEngine
-        Object actualPlugin = cePlugin;
-        try {
-            actualPlugin.getClass().getMethod("recipeManager");
-        } catch (NoSuchMethodException e) {
-            // PaperCraftEnginePlugin 壳：反射获取 bootstrap.plugin
-            try {
-                java.lang.reflect.Field bf = actualPlugin.getClass().getDeclaredField("bootstrap");
-                bf.setAccessible(true);
-                Object bootstrap = bf.get(actualPlugin);
-                java.lang.reflect.Field pf = bootstrap.getClass().getDeclaredField("plugin");
-                pf.setAccessible(true);
-                actualPlugin = pf.get(bootstrap);
-                logger.info("  [OK] CE 实例穿透 » " + actualPlugin.getClass().getSimpleName());
-            } catch (Exception ex) {
-                logger.info("非Paper壳: " + ex.getMessage());
-            }
-        }
+        this.asBukkitCopyMethod = null;
+        Object actualPlugin = resolveActualCEPlugin();
         this.actualCEPlugin = actualPlugin;
 
         // 用实际 CraftEngine 实例的 ClassLoader
@@ -150,6 +186,12 @@ public class CEBridge {
         Class<?> itemClass = Class.forName(
                 "net.momirealms.craftengine.core.item.Item", true, ceLoader);
         minecraftItemMethod = itemClass.getMethod("minecraftItem");
+        try {
+            platformItemMethod = itemClass.getMethod("platformItem");
+            logger.info("  [OK] CE 物品转换 » 平台 API 就绪");
+        } catch (NoSuchMethodException e) {
+            logger.info("CE Item.platformItem() 不可用，将使用兼容转换路径");
+        }
         // Item.hoverNameComponent() → Optional<Component>（default 方法，返回 GUI 显示名组件）
         try {
             itemHoverNameComponentMethod = itemClass.getMethod("hoverNameComponent");
@@ -164,27 +206,72 @@ public class CEBridge {
                 "net.momirealms.craftengine.core.item.ItemBuildContext", true, ceLoader);
         emptyBuildContext = ctxClass.getMethod("empty").invoke(null);
 
-        // CraftItemStack.asBukkitCopy(NMS ItemStack) → ItemStack
-        // Paper 1.21+ 路径无版本号：org.bukkit.craftbukkit.inventory.CraftItemStack
-        for (String cisPath : new String[]{
-                "org.bukkit.craftbukkit.inventory.CraftItemStack",       // Paper 1.21+
-                "org.bukkit.craftbukkit.v1_21_R3.inventory.CraftItemStack", // 旧版
-                "org.bukkit.craftbukkit.v1_20_R4.inventory.CraftItemStack"  // 更旧
-        }) {
-            try {
-                Class<?> cisClass = Class.forName(cisPath);
-                asBukkitCopyMethod = cisClass.getMethod("asBukkitCopy",
-                        Class.forName("net.minecraft.world.item.ItemStack"));
-                logger.info("CraftItemStack 转换器就绪: " + cisPath);
-                break;
-            } catch (Exception ignored) {}
-        }
-        if (asBukkitCopyMethod == null) {
-            logger.warning("CraftItemStack 转换器不可用，CE物品将显示为原版材质");
-        }
-
         // 加载原版 zh_cn 翻译（确保搜索/排序使用与客户端一致的显示名）
         loadVanillaZhTranslations();
+    }
+
+    /**
+     * 获取真正的 CraftEngine 核心实例。优先使用稳定的 CraftEngine.instance()，
+     * 再兼容 Paper bootstrap 壳和传统 Bukkit 壳。
+     */
+    private Object resolveActualCEPlugin() throws Exception {
+        ClassLoader pluginLoader = cePlugin.getClass().getClassLoader();
+        try {
+            Class<?> craftEngineClass = Class.forName(
+                    "net.momirealms.craftengine.core.plugin.CraftEngine", true, pluginLoader);
+            Object instance = craftEngineClass.getMethod("instance").invoke(null);
+            if (instance != null) {
+                logger.info("  [OK] CE 核心实例 » " + instance.getClass().getSimpleName());
+                return instance;
+            }
+        } catch (ReflectiveOperationException | LinkageError e) {
+            logger.fine("CraftEngine.instance() 获取失败: " + e.getClass().getSimpleName()
+                    + ": " + e.getMessage());
+        }
+
+        Object direct = cePlugin;
+        if (hasNoArgMethod(direct.getClass(), "recipeManager")) return direct;
+
+        Object bootstrap = readField(direct, "bootstrap");
+        Object paperCore = bootstrap != null ? readField(bootstrap, "plugin") : null;
+        if (paperCore != null && hasNoArgMethod(paperCore.getClass(), "recipeManager")) {
+            logger.info("  [OK] CE Paper 实例穿透 » " + paperCore.getClass().getSimpleName());
+            return paperCore;
+        }
+
+        Object bukkitCore = readField(direct, "plugin");
+        if (bukkitCore != null && hasNoArgMethod(bukkitCore.getClass(), "recipeManager")) {
+            logger.info("  [OK] CE Bukkit 实例穿透 » " + bukkitCore.getClass().getSimpleName());
+            return bukkitCore;
+        }
+
+        throw new IllegalStateException("无法获取 CraftEngine 核心实例: " + direct.getClass().getName());
+    }
+
+    private static boolean hasNoArgMethod(Class<?> type, String name) {
+        try {
+            type.getMethod(name);
+            return true;
+        } catch (NoSuchMethodException ignored) {
+            return false;
+        }
+    }
+
+    private static Object readField(Object target, String name) {
+        if (target == null) return null;
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                java.lang.reflect.Field field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(target);
+            } catch (NoSuchFieldException e) {
+                type = type.getSuperclass();
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+            }
+        }
+        return null;
     }
 
     /** 从插件内置资源加载原版 zh_cn.json 翻译文件 */
@@ -524,24 +611,117 @@ public class CEBridge {
                     Method orElse = optBuildable.getClass().getMethod("orElse", Object.class);
                     Object buildable = orElse.invoke(optBuildable, (Object) null);
                     if (buildable != null) {
-                        // Build CE Item
+                        // 由 CE 构建完整物品，再优先通过 CE 平台 API 取得 Bukkit ItemStack。
                         Object ceItem = buildItemMethod.invoke(buildable, emptyBuildContext, count);
-                        // Get NMS ItemStack
-                        Object nmsStack = minecraftItemMethod.invoke(ceItem);
-                        // Convert to Bukkit ItemStack
-                        if (asBukkitCopyMethod != null && nmsStack != null) {
-                            // 不覆盖 item_name 组件，让客户端按玩家语言解析名称
-                            return (ItemStack) asBukkitCopyMethod.invoke(null, nmsStack);
-                        }
+                        ItemStack bukkitItem = convertBuiltItemToBukkit(ceItem);
+                        if (bukkitItem != null) return bukkitItem;
                     }
                 }
             } catch (Exception e) {
-                logger.warning("构建 CE 物品失败 " + itemId + ": " + e.getMessage());
+                logConversionFailure(itemId, e);
             }
         }
 
         // 兜底：用解析出的 Material
         return new ItemStack(resolveMaterial(itemId), count);
+    }
+
+    /** 将 CE Item 转为 Bukkit ItemStack，不依赖固定的 CraftBukkit/NMS 包名。 */
+    private ItemStack convertBuiltItemToBukkit(Object ceItem) throws Exception {
+        if (ceItem == null) return null;
+        Exception lastFailure = null;
+
+        // CE 26.x 的正式平台抽象。Bukkit 实现直接返回完整的 Bukkit ItemStack。
+        if (platformItemMethod != null) {
+            try {
+                ItemStack stack = asBukkitItem(platformItemMethod.invoke(ceItem));
+                if (stack != null) return stack;
+            } catch (Exception e) {
+                lastFailure = e;
+            }
+        }
+
+        // 兼容 CE BukkitItem 的便捷方法。不要把具体实现类作为编译期依赖。
+        try {
+            Method getter = findMethod(ceItem.getClass(), "getBukkitItem", 0);
+            if (getter != null) {
+                ItemStack stack = asBukkitItem(getter.invoke(ceItem));
+                if (stack != null) return stack;
+            }
+        } catch (Exception e) {
+            lastFailure = e;
+        }
+
+        // 旧 CE 最终回退：根据实际服务端包和实际 NMS 参数类型寻找 asBukkitCopy。
+        if (minecraftItemMethod != null) {
+            try {
+                Object nmsStack = minecraftItemMethod.invoke(ceItem);
+                ItemStack stack = convertNmsToBukkit(nmsStack);
+                if (stack != null) return stack;
+            } catch (Exception e) {
+                lastFailure = e;
+            }
+        }
+
+        if (lastFailure != null) throw lastFailure;
+        throw new IllegalStateException("CE 未提供可用的 Bukkit 物品转换路径: " + ceItem.getClass().getName());
+    }
+
+    private static ItemStack asBukkitItem(Object value) {
+        if (!(value instanceof ItemStack stack) || stack.getType().isAir()) return null;
+        return stack.clone();
+    }
+
+    private ItemStack convertNmsToBukkit(Object nmsStack) throws Exception {
+        if (nmsStack == null) return null;
+        if (asBukkitCopyMethod == null) {
+            asBukkitCopyMethod = findCraftItemStackConverter(nmsStack.getClass());
+            if (asBukkitCopyMethod != null) {
+                logger.info("  [OK] CE 物品转换 » CraftBukkit 兼容路径就绪");
+            }
+        }
+        if (asBukkitCopyMethod == null) return null;
+        return asBukkitItem(asBukkitCopyMethod.invoke(null, nmsStack));
+    }
+
+    private Method findCraftItemStackConverter(Class<?> nmsStackClass) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        String serverPackage = Bukkit.getServer().getClass().getPackageName();
+        candidates.add(serverPackage + ".inventory.CraftItemStack");
+        candidates.add("org.bukkit.craftbukkit.inventory.CraftItemStack");
+
+        ClassLoader serverLoader = Bukkit.getServer().getClass().getClassLoader();
+        for (String className : candidates) {
+            try {
+                Class<?> craftItemStack = Class.forName(className, true, serverLoader);
+                for (Method method : craftItemStack.getMethods()) {
+                    if (!method.getName().equals("asBukkitCopy")
+                            || !Modifier.isStatic(method.getModifiers())
+                            || method.getParameterCount() != 1
+                            || !ItemStack.class.isAssignableFrom(method.getReturnType())) {
+                        continue;
+                    }
+                    if (method.getParameterTypes()[0].isAssignableFrom(nmsStackClass)) {
+                        return method;
+                    }
+                }
+            } catch (ClassNotFoundException | LinkageError e) {
+                logger.fine("CraftItemStack 路径不可用 " + className + ": " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    private void logConversionFailure(String itemId, Exception failure) {
+        Throwable cause = failure instanceof java.lang.reflect.InvocationTargetException invocation
+                && invocation.getCause() != null ? invocation.getCause() : failure;
+        if (!conversionFailureLogged) {
+            conversionFailureLogged = true;
+            logger.warning("CE 物品转换失败，暂以基础材质显示。首个物品=" + itemId
+                    + ", 原因=" + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+        } else {
+            logger.fine("CE 物品转换失败 " + itemId + ": " + cause.getMessage());
+        }
     }
 
     /** 获取配方类型的显示名称 */
@@ -551,25 +731,54 @@ public class CEBridge {
     }
 
     /** CE 物品名缓存：itemId → 名称（仅缓存成功结果，失败不缓存以支持延迟加载重试） */
-    private final Map<String, String> itemNameCache = new LinkedHashMap<>();
+    private final Map<String, String> itemNameCache = new ConcurrentHashMap<>();
     /** item_name 组件读取缓存（仅缓存成功结果） */
-    private final Map<String, String> displayNameCache = new LinkedHashMap<>();
+    private final Map<String, String> displayNameCache = new ConcurrentHashMap<>();
 
     /** 外部放入名字缓存（配方加载时从 YML 读回） */
-    /** 外部放入名字缓存（配方加载时从 YML 读回） */
-    public void putDisplayName(String itemId, String name) {
+    public void putDisplayName(String itemId, Locale locale, String name) {
         if (itemId != null && name != null && !name.isEmpty()) {
-            displayNameCache.put(itemId, name);
+            displayNameCache.put(displayNameCacheKey(itemId, locale), name);
         }
     }
 
     /** 清除所有名称缓存，强制重新从 CE 解析（reload 时调用） */
-    public void clearNameCaches() {
+    public synchronized void clearNameCaches() {
         displayNameCache.clear();
         itemNameCache.clear();
         ceTranslations.clear();
         ceTranslationsLoaded = false;
         logger.info("  [OK] 名称缓存 » 已清除");
+    }
+
+    private static String displayNameCacheKey(String itemId, Locale locale) {
+        return normalizeLanguage(locale != null ? locale.toString() : "zh_cn") + ":" + itemId;
+    }
+
+    private static String normalizeLanguage(String language) {
+        if (language == null || language.isBlank()) return "zh_cn";
+        return language.replace('-', '_').toLowerCase(Locale.ENGLISH);
+    }
+
+    private static boolean isChineseLocale(Locale locale) {
+        return locale != null && "zh".equalsIgnoreCase(locale.getLanguage());
+    }
+
+    private String findCETranslation(String key, Locale locale) {
+        if (key == null || key.isEmpty()) return null;
+        ensureCETranslationsLoaded();
+
+        String fullLang = normalizeLanguage(locale != null ? locale.toString() : "zh_cn");
+        String shortLang = fullLang.contains("_")
+                ? fullLang.substring(0, fullLang.indexOf('_')) : fullLang;
+        String value = ceTranslations.get(fullLang + ":" + key);
+        if (value == null && !shortLang.equals(fullLang)) {
+            value = ceTranslations.get(shortLang + ":" + key);
+        }
+        if (value == null && "zh".equals(shortLang)) {
+            value = ceTranslations.get(key);
+        }
+        return value;
     }
 
     /**
@@ -613,18 +822,8 @@ public class CEBridge {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("<(?:l10n|lang):([^>]+)>").matcher(raw);
         while (m.find()) {
             String key = m.group(1);
-            ensureCETranslationsLoaded();
-            // 按语言查：en_US → en_us:key → en:key → key（原始key回退）
-            String fullLang = (locale != null ? locale.toString() : "zh_cn").replace('-', '_').toLowerCase();
-            String shortLang = fullLang.contains("_") ? fullLang.substring(0, fullLang.indexOf('_')) : fullLang;
-            for (String tryKey : new String[]{
-                    fullLang + ":" + key,   // en_us:key
-                    shortLang + ":" + key,   // en:key
-                    key                      // key（clientLangData 的 zh_cn 回退）
-            }) {
-                String name = ceTranslations.get(tryKey);
-                if (name != null && !name.isEmpty()) return name;
-            }
+            String name = findCETranslation(key, locale);
+            if (name != null && !name.isEmpty()) return name;
         }
         return null;
     }
@@ -695,9 +894,8 @@ public class CEBridge {
             }
 
             // 3. 最终回退：CE TranslationManager
-            ensureCETranslationsLoaded();
             String tlKey = "item." + ns + "." + val;
-            String name = ceTranslations.get(tlKey);
+            String name = findCETranslation(tlKey, locale);
             if (name != null && !name.isEmpty()) return name;
 
         } catch (Exception e) {
@@ -753,14 +951,15 @@ public class CEBridge {
      */
     public String readItemDisplayName(String itemId, java.util.Locale locale) {
         if (itemId == null) return null;
-        String cached = displayNameCache.get(itemId);
+        String cacheKey = displayNameCacheKey(itemId, locale);
+        String cached = displayNameCache.get(cacheKey);
         if (cached != null) return cached;
 
         // 0. CE API hoverName 方式（最准确，直接用 CE 构建的 Item 提取名字组件）
         if (itemId.contains(":") && !itemId.startsWith("minecraft:")) {
             String hoverName = readCEItemHoverName(itemId, locale);
             if (hoverName != null && !hoverName.isEmpty()) {
-                displayNameCache.put(itemId, hoverName);
+                displayNameCache.put(cacheKey, hoverName);
                 return hoverName;
             }
         }
@@ -775,10 +974,9 @@ public class CEBridge {
 
             // 1. CE 翻译（CE 物品的 clientLangData）
             if (key != null) {
-                ensureCETranslationsLoaded();
-                String ceName = ceTranslations.get(key);
+                String ceName = findCETranslation(key, locale);
                 if (ceName != null && !isTranslationKey(ceName)) {
-                    displayNameCache.put(itemId, ceName);
+                    displayNameCache.put(cacheKey, ceName);
                     return ceName;
                 }
             }
@@ -786,8 +984,8 @@ public class CEBridge {
             // 2. 原版 zh_cn.json 翻译（与服务端 JAR 中的客户端翻译一致）
             if (key != null && vanillaZhLoaded) {
                 String vanillaName = vanillaZhTranslations.get(key);
-                if (vanillaName != null && !vanillaName.isEmpty()) {
-                    displayNameCache.put(itemId, vanillaName);
+                if (isChineseLocale(locale) && vanillaName != null && !vanillaName.isEmpty()) {
+                    displayNameCache.put(cacheKey, vanillaName);
                     return vanillaName;
                 }
             }
@@ -802,7 +1000,7 @@ public class CEBridge {
                         .plainText().serialize(rendered);
                 // 只接受真正的翻译文本，拒绝未翻译的 key
                 if (plain != null && !plain.isEmpty() && !isTranslationKey(plain)) {
-                    displayNameCache.put(itemId, plain);
+                    displayNameCache.put(cacheKey, plain);
                     return plain;
                 }
             } catch (Exception ignored) {}
@@ -813,17 +1011,16 @@ public class CEBridge {
                 String transKey = mat.getTranslationKey();
                 if (transKey != null && locale != null) {
                     // 优先查 CE clientLangData（含原版翻译）
-                    ensureCETranslationsLoaded();
-                    String ceName = ceTranslations.get(transKey);
+                    String ceName = findCETranslation(transKey, locale);
                     if (ceName != null && !ceName.isEmpty() && !isTranslationKey(ceName)) {
-                        displayNameCache.put(itemId, ceName);
+                        displayNameCache.put(cacheKey, ceName);
                         return ceName;
                     }
                     // 回退：从服务端 JAR 提取的原版 zh_cn.json
-                    if ("zh".equals(locale.getLanguage()) && vanillaZhLoaded) {
+                    if (isChineseLocale(locale) && vanillaZhLoaded) {
                         String vanillaName = vanillaZhTranslations.get(transKey);
                         if (vanillaName != null && !vanillaName.isEmpty()) {
-                            displayNameCache.put(itemId, vanillaName);
+                            displayNameCache.put(cacheKey, vanillaName);
                             return vanillaName;
                         }
                     }
@@ -883,9 +1080,9 @@ public class CEBridge {
         return text.matches("^[a-z_]+\\.[a-z_]+(\\.[a-z_]+)*$") && !text.contains(" ");
     }
 
-    /** CE 翻译缓存：translationKey → zh_cn 文本 */
-    private Map<String, String> ceTranslations = new LinkedHashMap<>();
-    private boolean ceTranslationsLoaded;
+    /** CE 翻译缓存：lang:translationKey → 文本；无语言前缀项为 zh_cn 兼容回退。 */
+    private final Map<String, String> ceTranslations = new ConcurrentHashMap<>();
+    private volatile boolean ceTranslationsLoaded;
 
     /** 原版 Minecraft zh_cn 翻译缓存：translationKey → 中文文本 */
     private final Map<String, String> vanillaZhTranslations = new LinkedHashMap<>();
@@ -910,13 +1107,29 @@ public class CEBridge {
             Map<String, Object> clientData = (Map<String, Object>) tm.getClass()
                     .getMethod("clientLangData").invoke(tm);
             logger.info("  [OK] 翻译系统 » " + clientData.size() + " 种语言可用");
+            for (Map.Entry<String, Object> entry : clientData.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) continue;
+                @SuppressWarnings("unchecked")
+                Map<String, String> translations = (Map<String, String>) entry.getValue().getClass()
+                        .getField("translations").get(entry.getValue());
+                String langPrefix = normalizeLanguage(entry.getKey()) + ":";
+                translations.forEach((key, value) -> {
+                    if (key != null && value != null && !value.isEmpty()) {
+                        ceTranslations.put(langPrefix + key, value);
+                    }
+                });
+            }
             Object zhCN = clientData.get("zh_cn");
+            if (zhCN == null) zhCN = clientData.get("zh");
             if (zhCN != null) {
                 @SuppressWarnings("unchecked")
                 Map<String, String> translations = (Map<String, String>) zhCN.getClass()
                         .getField("translations").get(zhCN);
-                ceTranslations.putAll(translations);
-                // 不 return —— 继续加载 translations.yml（pack 翻译）
+                translations.forEach((key, value) -> {
+                    if (key != null && value != null && !value.isEmpty()) {
+                        ceTranslations.putIfAbsent(key, value);
+                    }
+                });
             } else {
                 logger.warning("[CE翻译] zh_cn 数据为 null！可用语言: " + clientData.keySet());
             }
@@ -954,11 +1167,15 @@ public class CEBridge {
                 for (String lang : tlSec.getKeys(false)) {
                     org.bukkit.configuration.ConfigurationSection langSec = tlSec.getConfigurationSection(lang);
                     if (langSec == null) continue;
-                    String langPrefix = lang.toLowerCase() + ":";
+                    String normalizedLang = normalizeLanguage(lang);
+                    String langPrefix = normalizedLang + ":";
                     for (String key : langSec.getKeys(true)) {
                         Object val = langSec.get(key);
                         if (val instanceof String s && !s.isEmpty()) {
                             ceTranslations.putIfAbsent(langPrefix + key, s);
+                            if ("zh_cn".equals(normalizedLang) || "zh".equals(normalizedLang)) {
+                                ceTranslations.putIfAbsent(key, s);
+                            }
                         }
                     }
                 }
@@ -968,8 +1185,7 @@ public class CEBridge {
 
     /** 从 CE 的 clientLangData 查找翻译键 */
     private String resolveViaTranslationManager(String key) {
-        ensureCETranslationsLoaded();
-        return ceTranslations.get(key);
+        return findCETranslation(key, Locale.SIMPLIFIED_CHINESE);
     }
 
     /**
@@ -1012,8 +1228,7 @@ public class CEBridge {
         if (component == null) return null;
         String key = getTranslationKey(component);
         if (key == null) return null;
-        loadCETranslations();
-        return ceTranslations.get(key);
+        return findCETranslation(key, Locale.SIMPLIFIED_CHINESE);
     }
 
     /** 提取翻译键的尾部作为兜底名称 */
@@ -1064,7 +1279,9 @@ public class CEBridge {
         if (stack == null) return null;
         // 使用 CE API: CraftEngineItems.getCustomItemId()
         try {
-            Class<?> ceiClass = Class.forName("net.momirealms.craftengine.bukkit.api.CraftEngineItems");
+            if (!available || ceLoader == null) return null;
+            Class<?> ceiClass = Class.forName(
+                    "net.momirealms.craftengine.bukkit.api.CraftEngineItems", true, ceLoader);
             java.lang.reflect.Method m = ceiClass.getMethod("getCustomItemId", ItemStack.class);
             Object result = m.invoke(null, stack);
             if (result != null) {

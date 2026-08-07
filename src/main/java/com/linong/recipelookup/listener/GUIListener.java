@@ -155,6 +155,8 @@ public class GUIListener implements Listener {
         switch (guiType) {
             case RecipeGUI.TYPE_MAIN -> handleMainClick(player, slot, menu);
             case RecipeGUI.TYPE_LIST -> handleListClick(player, slot, menu, event);
+            case RecipeGUI.TYPE_ADMIN_MAIN -> handleAdminMainClick(player, slot, menu);
+            case RecipeGUI.TYPE_ADMIN_LIST -> handleAdminListClick(player, slot, menu, event);
         }
     }
 
@@ -405,6 +407,106 @@ public class GUIListener implements Listener {
             plugin.getChatSearchListener().cancelSearch(player);
         } else if (click == ClickType.RIGHT) {
             gui.toggleSearchMode(player);
+        } else {
+            String mode = gui.getSearchMode(player.getUniqueId());
+            plugin.getChatSearchListener().expectSearch(player, categoryId, mode);
+        }
+    }
+
+    // ========== 管理员主菜单 ==========
+
+    private void handleAdminMainClick(Player player, int slot, MenuDef menu) {
+        if (menu == null) return;
+        ButtonDef btn = MenuConfig.buttonAt(menu, slot);
+        if (btn == null || btn.action().isEmpty()) return;
+
+        playButtonSound(player, btn);
+
+        switch (btn.action()) {
+            case "OPEN_CATEGORY" -> {
+                if (!btn.category().isEmpty()) {
+                    gui.openAdminRecipeList(player, btn.category(), 0);
+                }
+            }
+            case "RUN_COMMAND" -> runButtonCommand(player, btn);
+            case "CLOSE" -> player.closeInventory();
+        }
+    }
+
+    // ========== 管理员配方列表 ==========
+
+    private void handleAdminListClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
+        if (menu == null) return;
+
+        String categoryId = gui.getPlayerCategory(player.getUniqueId());
+        if (categoryId == null) return;
+        int page = gui.getPlayerPage(player.getUniqueId());
+
+        int row = slot / 9;
+        int col = slot % 9;
+        if (row >= menu.shape().length) return;
+        String line = menu.shape()[row];
+        if (col >= line.length()) return;
+        char c = line.charAt(col);
+
+        if (c == 'I') {
+            java.util.Locale locale = gui.resolveLocale();
+            List<CEBridge.RecipeData> recipes = gui.getPlayerRecipes(player.getUniqueId());
+            if (recipes == null) {
+                recipes = gui.getSortedRecipesAdmin(categoryId,
+                        gui.getSearchQuery(player.getUniqueId()), locale, player.getUniqueId());
+            }
+
+            List<Integer> itemSlots = MenuConfig.itemSlots(menu.shape());
+            int itemIndex = itemSlots.indexOf(slot);
+            if (itemIndex < 0) return;
+
+            int pageSize = itemSlots.size();
+            int recipeIdx = page * pageSize + itemIndex;
+            if (recipeIdx < recipes.size()) {
+                CEBridge.RecipeData recipe = recipes.get(recipeIdx);
+                // 点击切换可见性
+                gui.toggleRecipeVisibility(player, recipe);
+                // 刷新当前页面
+                gui.openAdminRecipeList(player, categoryId, page);
+            }
+            return;
+        }
+
+        ButtonDef btn = menu.buttons().get(c);
+        if (btn == null || btn.action().isEmpty()) return;
+
+        playButtonSound(player, btn);
+
+        switch (btn.action()) {
+            case "RUN_COMMAND" -> runButtonCommand(player, btn);
+            case "PREV_PAGE" -> {
+                if (page > 0) gui.openAdminRecipeList(player, categoryId, page - 1);
+            }
+            case "NEXT_PAGE" -> {
+                java.util.Locale locale = gui.resolveLocale();
+                List<CEBridge.RecipeData> recipes = gui.getSortedRecipesAdmin(categoryId,
+                        gui.getSearchQuery(player.getUniqueId()), locale, player.getUniqueId());
+                int pageSize = MenuConfig.itemSlots(menu.shape()).size();
+                int totalPages = Math.max(1, (recipes.size() + pageSize - 1) / pageSize);
+                if (page < totalPages - 1) gui.openAdminRecipeList(player, categoryId, page + 1);
+            }
+            case "SEARCH" -> handleAdminSearchClick(player, categoryId, event);
+            case "BACK_TO_MAIN" -> gui.openAdminMainMenu(player);
+            case "CLOSE" -> player.closeInventory();
+        }
+    }
+
+    private void handleAdminSearchClick(Player player, String categoryId, InventoryClickEvent event) {
+        ClickType click = event.getClick();
+        if (click == ClickType.SHIFT_LEFT) {
+            gui.clearAdminSearch(player);
+            plugin.getChatSearchListener().cancelSearch(player);
+        } else if (click == ClickType.RIGHT) {
+            gui.toggleSearchMode(player);
+            String category = gui.getPlayerCategory(player.getUniqueId());
+            int page = gui.getPlayerPage(player.getUniqueId());
+            gui.openAdminRecipeList(player, category, page);
         } else {
             String mode = gui.getSearchMode(player.getUniqueId());
             plugin.getChatSearchListener().expectSearch(player, categoryId, mode);

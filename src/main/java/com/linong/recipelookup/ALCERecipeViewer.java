@@ -11,6 +11,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ALCERecipeViewer extends JavaPlugin {
 
@@ -21,9 +22,12 @@ public final class ALCERecipeViewer extends JavaPlugin {
     private CEBridge ceBridge;
     private RecipeGUI recipeGUI;
     private ChatSearchListener chatSearchListener;
+    private RecipeVisibilityManager visibilityManager;
 
     /** typeId → 配方列表 */
-    private Map<String, List<CEBridge.RecipeData>> loadedRecipes = Map.of();
+    private volatile Map<String, List<CEBridge.RecipeData>> loadedRecipes = Map.of();
+    private final Object recipeLoadLock = new Object();
+    private final AtomicBoolean ceReloadRefreshRunning = new AtomicBoolean();
 
     @Override
     public void onEnable() {
@@ -44,6 +48,9 @@ public final class ALCERecipeViewer extends JavaPlugin {
         this.menuConfig = new MenuConfig(this);
         menuConfig.load();
 
+        this.visibilityManager = new RecipeVisibilityManager(this);
+        visibilityManager.load();
+
         this.ceBridge = new CEBridge(getLogger());
         if (!ceBridge.isAvailable()) {
             getLogger().warning("CraftEngine 未安装或版本不兼容！");
@@ -52,6 +59,10 @@ public final class ALCERecipeViewer extends JavaPlugin {
         }
 
         this.recipeGUI = new RecipeGUI(this);
+
+        if (ceBridge.isAvailable()) {
+            ceBridge.registerReloadListener(this, this::onCraftEngineReload);
+        }
 
         try {
             Objects.requireNonNull(getCommand("alcerecipes"))
@@ -96,34 +107,59 @@ public final class ALCERecipeViewer extends JavaPlugin {
 
     /** 首次加载：尝试缓存，缓存不存在则 CE */
     void loadRecipesInitial() {
-        Map<String, List<CEBridge.RecipeData>> cached = loadRecipeCache();
-        if (!cached.isEmpty()) {
-            this.loadedRecipes = cached;
-            getLogger().info("  [OK] 配方缓存 » " + cached.values().stream().mapToInt(List::size).sum() + " 个");
-            return;
+        synchronized (recipeLoadLock) {
+            if (!loadedRecipes.isEmpty()) return;
+            Map<String, List<CEBridge.RecipeData>> cached = loadRecipeCache();
+            if (!cached.isEmpty()) {
+                this.loadedRecipes = cached;
+                getLogger().info("  [OK] 配方缓存 » " + cached.values().stream().mapToInt(List::size).sum() + " 个");
+                return;
+            }
+            if (!ceBridge.isAvailable() && !ceBridge.reconnect()) return;
+            this.loadedRecipes = ceBridge.loadAllRecipes();
+            if (!loadedRecipes.isEmpty()) saveRecipeCache(loadedRecipes);
         }
-        this.loadedRecipes = ceBridge.loadAllRecipes();
-        if (!loadedRecipes.isEmpty()) saveRecipeCache(loadedRecipes);
     }
 
     /** reload：强制从 CE 重新加载并更新缓存 */
     public void reloadRecipes() {
-        configManager.reload();
-        menuConfig.reload();
-        ceBridge.clearNameCaches(); // 清除名称缓存，强制重新解析 CE 翻译
-        this.loadedRecipes = ceBridge.loadAllRecipes();
-        if (!loadedRecipes.isEmpty()) {
-            saveRecipeCache(loadedRecipes);
-            // 预热：收集所有唯一物品 ID 并解析名字，填充到缓存
-            java.util.Locale locale = java.util.Locale.SIMPLIFIED_CHINESE;
-            for (List<CEBridge.RecipeData> list : loadedRecipes.values()) {
-                for (CEBridge.RecipeData r : list) {
-                    recipeGUI.toChineseName(r.resultId, locale);
-                    for (String ing : r.ingredientIds) recipeGUI.toChineseName(ing, locale);
-                }
+        synchronized (recipeLoadLock) {
+            configManager.reload();
+            menuConfig.reload();
+            visibilityManager.reload();
+            if (!ceBridge.isAvailable() && !ceBridge.reconnect()) {
+                this.loadedRecipes = Map.of();
+                return;
             }
-            getLogger().info("  [OK] 名字预热 » 完成");
+            ceBridge.clearNameCaches(); // 清除名称缓存，强制重新解析 CE 翻译
+            this.loadedRecipes = ceBridge.loadAllRecipes();
+            if (!loadedRecipes.isEmpty()) {
+                saveRecipeCache(loadedRecipes);
+                // 按当前配置语言预热名字缓存。
+                java.util.Locale locale = recipeGUI.resolveLocale();
+                for (List<CEBridge.RecipeData> list : loadedRecipes.values()) {
+                    for (CEBridge.RecipeData r : list) {
+                        recipeGUI.toChineseName(r.resultId, locale);
+                        for (String ing : r.ingredientIds) recipeGUI.toChineseName(ing, locale);
+                    }
+                }
+                getLogger().info("  [OK] 名字预热 » 完成");
+            }
         }
+    }
+
+    /** CE 首次完整加载及后续 reload 完成后的同步入口。 */
+    private void onCraftEngineReload() {
+        if (!ceReloadRefreshRunning.compareAndSet(false, true)) return;
+        foliaLib.getScheduler().runAsync(task -> {
+            try {
+                reloadRecipes();
+                int total = loadedRecipes.values().stream().mapToInt(List::size).sum();
+                getLogger().info("  [OK] CE 重载同步 » " + total + " 个配方");
+            } finally {
+                ceReloadRefreshRunning.set(false);
+            }
+        });
     }
 
     /** 清空所有缓存 */
@@ -190,7 +226,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
                 String lang = configManager.getLanguage();
                 String name = yaml.getString(key + ".name_" + lang, "");
                 if (name.isEmpty()) name = yaml.getString(key + ".name", ""); // 兼容旧格式
-                if (!name.isEmpty()) ceBridge.putDisplayName(result, name);
+                if (!name.isEmpty()) ceBridge.putDisplayName(result, recipeGUI.resolveLocale(), name);
             }
             recipes.put(typeId, list);
         }
@@ -266,5 +302,6 @@ public final class ALCERecipeViewer extends JavaPlugin {
     public CEBridge getCEBridge() { return ceBridge; }
     public RecipeGUI getRecipeGUI() { return recipeGUI; }
     public ChatSearchListener getChatSearchListener() { return chatSearchListener; }
+    public RecipeVisibilityManager getVisibilityManager() { return visibilityManager; }
     public Map<String, List<CEBridge.RecipeData>> getLoadedRecipes() { return loadedRecipes; }
 }

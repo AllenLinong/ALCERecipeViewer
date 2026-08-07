@@ -207,4 +207,22 @@ public class ConfigManager {
     public String getCmdUsageOpen() { return cmdUsageOpen; }
     public String getCmdUsageReload() { return cmdUsageReload; }
     public String getDetailTitle(String t) { return detailTitles.getOrDefault(t, detailTitles.getOrDefault("crafting", "&8配方详情")); }
+
+    // 管理员菜单
+    public String getAdminMenuTitle() {
+        String v = getLangString("menu.admin_main_title");
+        return v != null ? v : "§8管理员 - 配方管理";
+    }
+    public String getAdminListTitle() {
+        String v = getLangString("menu.admin_list_title");
+        return v != null ? v : "§8管理员 - {category} ({page}/{total})";
+    }
+    public String getAdminToggleHidden() {
+        String v = getLangString("admin.toggle_hidden");
+        return v != null ? v : "§c已隐藏配方";
+    }
+    public String getAdminToggleShown() {
+        String v = getLangString("admin.toggle_shown");
+        return v != null ? v : "§a已显示配方";
+    }
 }

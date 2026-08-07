@@ -53,6 +53,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
             case "reload" -> handleReload(player);
             case "clear" -> handleClear(player);
             case "create", "new" -> handleCreate(player);
+            case "admin", "manage" -> handleAdmin(player);
             default -> sendHelp(player);
         }
         return true;
@@ -81,6 +82,18 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         gui.openRecipeCreatorType(player);
     }
 
+    private void handleAdmin(Player player) {
+        if (!player.hasPermission("alcerecipeviewer.admin")) {
+            player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoPermission());
+            return;
+        }
+        if (plugin.getLoadedRecipes().isEmpty()) {
+            player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoRecipes());
+            return;
+        }
+        gui.openAdminMainMenu(player);
+    }
+
     private void handleClear(Player player) {
         if (!player.hasPermission("alcerecipeviewer.admin")) {
             player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoPermission());
@@ -96,6 +109,9 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(config.getCmdUsageReload());
         player.sendMessage(config.getCreatorHelpClear());
         player.sendMessage("§e  /alcerecipes create §7- 打开新增配方菜单（管理员）");
+        if (player.hasPermission("alcerecipeviewer.admin")) {
+            player.sendMessage("§e  /alcerecipes admin §7- 打开配方管理菜单（管理员）");
+        }
     }
 
     @Override
@@ -105,7 +121,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
                                       @NotNull String[] args) {
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
-            return List.of("reload", "clear", "create").stream()
+            return List.of("reload", "clear", "create", "admin", "manage").stream()
                     .filter(s -> s.startsWith(prefix)).sorted().toList();
         }
         return List.of();

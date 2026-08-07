@@ -20,6 +20,7 @@ public class ChatSearchListener implements Listener {
 
     private final Map<UUID, String> waitingSearch = new ConcurrentHashMap<>();
     private final Map<UUID, String> searchModeStore = new ConcurrentHashMap<>();
+    private final Map<UUID, Boolean> adminModeStore = new ConcurrentHashMap<>();
     private final ALCERecipeViewer plugin;
     private final ConfigManager config;
 
@@ -34,6 +35,10 @@ public class ChatSearchListener implements Listener {
         waitingSearch.put(uuid, categoryId);
         if (mode != null) searchModeStore.put(uuid, mode);
         else searchModeStore.remove(uuid);
+        // 记录当前是否在管理员菜单中
+        String guiType = plugin.getRecipeGUI().getGUIType(uuid);
+        boolean isAdmin = RecipeGUI.TYPE_ADMIN_LIST.equals(guiType) || RecipeGUI.TYPE_ADMIN_MAIN.equals(guiType);
+        adminModeStore.put(uuid, isAdmin);
         player.closeInventory();
         player.sendMessage(config.getChatSearchPrompt());
     }
@@ -42,6 +47,7 @@ public class ChatSearchListener implements Listener {
         UUID uuid = player.getUniqueId();
         waitingSearch.remove(uuid);
         searchModeStore.remove(uuid);
+        adminModeStore.remove(uuid);
     }
 
     @EventHandler
@@ -59,6 +65,7 @@ public class ChatSearchListener implements Listener {
         UUID uuid = player.getUniqueId();
         String categoryId = waitingSearch.remove(uuid);
         String mode = searchModeStore.remove(uuid);
+        Boolean isAdmin = adminModeStore.remove(uuid);
         if (categoryId == null) return;
 
         event.setCancelled(true);
@@ -66,7 +73,11 @@ public class ChatSearchListener implements Listener {
         if (msg.equalsIgnoreCase("cancel")) {
             plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
                 player.sendMessage(config.getChatSearchCancelled());
-                plugin.getRecipeGUI().openRecipeList(player, categoryId, 0);
+                if (isAdmin != null && isAdmin) {
+                    plugin.getRecipeGUI().openAdminRecipeList(player, categoryId, 0);
+                } else {
+                    plugin.getRecipeGUI().openRecipeList(player, categoryId, 0);
+                }
             });
             return;
         }
@@ -75,13 +86,19 @@ public class ChatSearchListener implements Listener {
         final String q = msg;
         final String searchMode = mode != null ? mode : RecipeGUI.SEARCH_MODE_RESULT;
         final java.util.Locale locale = plugin.getRecipeGUI().resolveLocale();
+        final boolean adminSearch = isAdmin != null && isAdmin;
         List<CEBridge.RecipeData> all = plugin.getLoadedRecipes().getOrDefault(categoryId, List.of());
         List<CEBridge.RecipeData> filtered = all.stream()
                 .filter(r -> matchesQuery(r, q, locale, searchMode))
                 .collect(Collectors.toList());
 
         plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
-            plugin.getRecipeGUI().openFilteredRecipeList(player, categoryId, filtered, msg);
+            if (adminSearch) {
+                // 管理员：打开管理员列表（不过滤隐藏）
+                plugin.getRecipeGUI().openFilteredAdminRecipeList(player, categoryId, filtered, msg);
+            } else {
+                plugin.getRecipeGUI().openFilteredRecipeList(player, categoryId, filtered, msg);
+            }
             player.sendMessage(config.getChatSearchResult(filtered.size()));
         });
     }

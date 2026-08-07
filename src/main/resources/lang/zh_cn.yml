@@ -183,3 +183,11 @@ menu:
   page_indicator: "&7第 {page} 页"
   back_to_main_desc: "&7点击返回分类浏览"
   creator_exp: "&a&l经验: &f{exp}"
+  # 管理员菜单
+  admin_main_title: "&8管理员 - 配方管理"
+  admin_list_title: "&8管理员 - {category} ({page}/{total})"
+
+# 管理员消息
+admin:
+  toggle_hidden: "&c已隐藏配方"
+  toggle_shown: "&a已显示配方"

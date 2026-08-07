@@ -30,6 +30,9 @@ public class RecipeGUI {
     public static final String TYPE_MAIN = "main";
     public static final String TYPE_LIST = "list";
     public static final String TYPE_DETAIL = "detail";
+    public static final String TYPE_ADMIN_MAIN = "admin_main";
+    public static final String TYPE_ADMIN_LIST = "admin_list";
+    public static final String TYPE_ADMIN_DETAIL = "admin_detail";
 
     public static final String SEARCH_MODE_RESULT = "result";
     public static final String SEARCH_MODE_INGREDIENT = "ingredient";
@@ -122,6 +125,69 @@ public class RecipeGUI {
         player.openInventory(inv);
     }
 
+    // ===================== 管理员主菜单 =====================
+
+    public void openAdminMainMenu(Player player) {
+        MenuDef menu = menuConfig.getMainMenu();
+        if (menu == null) return;
+
+        int size = MenuConfig.shapeSize(menu.shape());
+        UUID uuid = player.getUniqueId();
+        String title = config.getAdminMenuTitle() != null ? config.getAdminMenuTitle() : "§8管理员 - 配方管理";
+        Inventory inv = createGUIInventory(uuid, TYPE_ADMIN_MAIN, size, title);
+
+        for (int row = 0; row < menu.shape().length; row++) {
+            String line = menu.shape()[row];
+            for (int col = 0; col < line.length() && col < 9; col++) {
+                char c = line.charAt(col);
+                int slot = row * 9 + col;
+                ButtonDef btn = menu.buttons().get(c);
+                if (btn == null) continue;
+
+                if (btn.dynamic()) continue;
+
+                if (c == '#') {
+                    inv.setItem(slot, buildButtonOrCE(btn, null));
+                } else {
+                    int count = plugin.getLoadedRecipes()
+                            .getOrDefault(btn.category(), List.of()).size();
+                    int hiddenCount = 0;
+                    for (CEBridge.RecipeData r : plugin.getLoadedRecipes().getOrDefault(btn.category(), List.of())) {
+                        if (plugin.getVisibilityManager().isHidden(r.resultId)) hiddenCount++;
+                    }
+                    Map<String, String> v = MenuConfig.vars(
+                            "count", String.valueOf(count),
+                            "hidden", String.valueOf(hiddenCount));
+                    inv.setItem(slot, buildAdminCategoryButton(btn, v));
+                }
+            }
+        }
+
+        guiType.put(uuid, TYPE_ADMIN_MAIN);
+        playerCategory.remove(uuid);
+        playerPage.remove(uuid);
+        if (menu != null) playerMenuDef.put(uuid, menu);
+        else playerMenuDef.remove(uuid);
+        openInventories.put(uuid, inv);
+        player.openInventory(inv);
+    }
+
+    private ItemStack buildAdminCategoryButton(ButtonDef btn, Map<String, String> vars) {
+        ItemStack item = buildButtonOrCE(btn, vars);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            List<String> lore = meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+            if (vars != null && vars.containsKey("hidden")) {
+                lore.add("");
+                lore.add("§7已隐藏: §c" + vars.get("hidden") + " §7个配方");
+                lore.add("§e▶ 点击进入管理");
+            }
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
     // ===================== 配方列表 =====================
 
     public void openRecipeList(Player player, String categoryId, int page) {
@@ -209,11 +275,23 @@ public class RecipeGUI {
         openRecipeList(player, categoryId, 0);
     }
 
-    /** 获取排序后的配方列表（去重：同一结果物品只显示一条，多配方时显示合并提示） */
+    public void openFilteredAdminRecipeList(Player player, String categoryId, List<CEBridge.RecipeData> filtered, String query) {
+        searchQuery.put(player.getUniqueId(), query);
+        openAdminRecipeList(player, categoryId, 0);
+    }
+
+    /** 获取排序后的配方列表（去重：同一结果物品只显示一条，多配方时显示合并提示）。
+     *  普通玩家版本：过滤掉已隐藏的配方。 */
     public List<CEBridge.RecipeData> getSortedRecipes(String categoryId, String filter, Locale locale, UUID uuid) {
         List<CEBridge.RecipeData> all = plugin.getLoadedRecipes().getOrDefault(categoryId, List.of());
-        List<CEBridge.RecipeData> recipes = new ArrayList<>(
-                (filter != null) ? filterRecipes(all, filter, locale, uuid) : all);
+        List<CEBridge.RecipeData> filtered = (filter != null) ? filterRecipes(all, filter, locale, uuid) : all;
+        // 过滤掉已隐藏的配方
+        List<CEBridge.RecipeData> recipes = new ArrayList<>();
+        for (CEBridge.RecipeData r : filtered) {
+            if (!plugin.getVisibilityManager().isHidden(r.resultId)) {
+                recipes.add(r);
+            }
+        }
         // 按 resultId 分组，记录多配方组
         Map<String, List<CEBridge.RecipeData>> groups = new LinkedHashMap<>();
         for (CEBridge.RecipeData r : recipes) {
@@ -240,6 +318,130 @@ public class RecipeGUI {
         searchQuery.remove(uuid);
         String category = playerCategory.getOrDefault(uuid, "crafting");
         openRecipeList(player, category, 0);
+    }
+
+    // ===================== 管理员配方列表 =====================
+
+    public void openAdminRecipeList(Player player, String categoryId, int page) {
+        if (categoryId == null) {
+            openAdminMainMenu(player);
+            return;
+        }
+        MenuDef menu = menuConfig.getRecipeList();
+        if (menu == null) return;
+
+        Locale locale = resolveLocale();
+        String filter = searchQuery.get(player.getUniqueId());
+        List<CEBridge.RecipeData> recipes = getSortedRecipesAdmin(categoryId, filter, locale, player.getUniqueId());
+
+        List<Integer> itemSlots = MenuConfig.itemSlots(menu.shape());
+        int pageSize = itemSlots.size();
+        int totalPages = Math.max(1, (recipes.size() + pageSize - 1) / pageSize);
+        if (page < 0) page = 0;
+        if (page >= totalPages) page = totalPages - 1;
+
+        CEBridge.CategoryMeta meta = CEBridge.CATEGORIES.get(categoryId);
+        String categoryName = config.getDefaultCategoryName(categoryId);
+        if (meta != null && categoryName.equals(categoryId)) categoryName = meta.name;
+        String title = (config.getAdminListTitle() != null ? config.getAdminListTitle() : "§8管理员 - {category} ({page}/{total})")
+                .replace("{category}", categoryName)
+                .replace("{page}", String.valueOf(page + 1))
+                .replace("{total}", String.valueOf(totalPages));
+        if (filter != null && !filter.isEmpty()) {
+            title += config.getSearchTitleSuffix(filter);
+        }
+
+        int size = MenuConfig.shapeSize(menu.shape());
+        UUID uuid = player.getUniqueId();
+        Inventory inv = createGUIInventory(uuid, TYPE_ADMIN_LIST, size, title);
+
+        int recipeIdx = page * pageSize;
+        for (int row = 0; row < menu.shape().length; row++) {
+            String line = menu.shape()[row];
+            for (int col = 0; col < line.length() && col < 9; col++) {
+                char c = line.charAt(col);
+                int slot = row * 9 + col;
+                ButtonDef btn = menu.buttons().get(c);
+                if (btn == null) continue;
+
+                if (c == 'I') {
+                    if (recipeIdx < recipes.size()) {
+                        CEBridge.RecipeData rec = recipes.get(recipeIdx);
+                        Map<String, List<CEBridge.RecipeData>> groups = playerResultRecipeGroups
+                                .getOrDefault(player.getUniqueId(), Map.of());
+                        List<CEBridge.RecipeData> group = groups.get(rec.resultId);
+                        int multiCount = group != null ? group.size() : 1;
+                        inv.setItem(slot, createAdminRecipeEntryIcon(rec, multiCount));
+                        recipeIdx++;
+                    }
+                } else if (c == '#') {
+                    inv.setItem(slot, buildButtonOrCE(btn, null));
+                } else {
+                    String currentMode = searchMode.getOrDefault(player.getUniqueId(), SEARCH_MODE_RESULT);
+                    String modeText = SEARCH_MODE_RESULT.equals(currentMode)
+                            ? config.getSearchModeResult() : config.getSearchModeIngredient();
+                    Map<String, String> v = MenuConfig.vars(
+                            "page", String.valueOf(page + 1),
+                            "total", String.valueOf(totalPages),
+                            "query", filter != null ? filter : "无",
+                            "category", categoryName,
+                            "mode_line", modeText
+                    );
+                    inv.setItem(slot, buildButtonOrCE(btn, v));
+                }
+            }
+        }
+
+        guiType.put(uuid, TYPE_ADMIN_LIST);
+        playerCategory.put(uuid, categoryId);
+        playerPage.put(uuid, page);
+        if (menu != null) playerMenuDef.put(uuid, menu);
+        else playerMenuDef.remove(uuid);
+        openInventories.put(uuid, inv);
+        playerRecipes.put(uuid, recipes);
+        player.openInventory(inv);
+    }
+
+    /** 管理员版本：获取所有配方（包括隐藏的），不做隐藏过滤 */
+    public List<CEBridge.RecipeData> getSortedRecipesAdmin(String categoryId, String filter, Locale locale, UUID uuid) {
+        List<CEBridge.RecipeData> all = plugin.getLoadedRecipes().getOrDefault(categoryId, List.of());
+        List<CEBridge.RecipeData> recipes = new ArrayList<>(
+                (filter != null) ? filterRecipes(all, filter, locale, uuid) : all);
+        Map<String, List<CEBridge.RecipeData>> groups = new LinkedHashMap<>();
+        for (CEBridge.RecipeData r : recipes) {
+            groups.computeIfAbsent(r.resultId, k -> new ArrayList<>()).add(r);
+        }
+        playerResultRecipeGroups.put(uuid, Collections.unmodifiableMap(new LinkedHashMap<>(groups)));
+        List<CEBridge.RecipeData> deduped = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (CEBridge.RecipeData r : recipes) {
+            if (seen.add(r.resultId)) deduped.add(r);
+        }
+        Map<CEBridge.RecipeData, String> nameMap = new HashMap<>();
+        for (CEBridge.RecipeData r : deduped) {
+            nameMap.put(r, toChineseName(r.resultId, locale));
+        }
+        deduped.sort(Comparator.comparing(nameMap::get, CN_COLLATOR));
+        return deduped;
+    }
+
+    public void clearAdminSearch(Player player) {
+        UUID uuid = player.getUniqueId();
+        searchQuery.remove(uuid);
+        String category = playerCategory.getOrDefault(uuid, "crafting");
+        openAdminRecipeList(player, category, 0);
+    }
+
+    /** 切换配方可见性，返回切换后是否隐藏 */
+    public boolean toggleRecipeVisibility(Player player, CEBridge.RecipeData recipe) {
+        boolean hidden = plugin.getVisibilityManager().toggle(recipe.resultId);
+        String name = toChineseName(recipe.resultId, resolveLocale());
+        if (hidden) {
+            player.sendMessage(config.getPluginPrefix() + " §c已隐藏 §f" + name + " §c的配方（普通玩家不可见）");
+        } else {
+            player.sendMessage(config.getPluginPrefix() + " §a已显示 §f" + name + " §a的配方（普通玩家可见）");
+        }
+        return hidden;
     }
 
     // ===================== 新增配方 GUI（管理员）=====================
@@ -1289,6 +1491,32 @@ public class RecipeGUI {
         }
         lore.add("");
         lore.add(config.getBtnLoreClick());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return markGUIItem(item);
+    }
+
+    private ItemStack createAdminRecipeEntryIcon(CEBridge.RecipeData recipe, int recipeCount) {
+        ItemStack item = bridge.buildItemStack(recipe.resultId, recipe.resultCount);
+        String typeName = config.getRecipeTypeName(recipe.type);
+        boolean hidden = plugin.getVisibilityManager().isHidden(recipe.resultId);
+        List<String> lore = new ArrayList<>();
+        lore.add(config.getBtnLoreResult(recipe.resultCount));
+        lore.add(config.getBtnLoreType(typeName));
+        if (recipeCount > 1) {
+            lore.add(config.getBtnLoreMultiRecipes(recipeCount));
+        }
+        lore.add("");
+        if (hidden) {
+            lore.add("§7状态: §c✘ 已隐藏（普通玩家不可见）");
+        } else {
+            lore.add("§7状态: §a✔ 已显示（普通玩家可见）");
+        }
+        lore.add("");
+        lore.add("§e▶ 点击切换显示/隐藏");
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setLore(lore);

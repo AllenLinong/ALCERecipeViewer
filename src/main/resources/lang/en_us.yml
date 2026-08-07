@@ -165,3 +165,11 @@ menu:
   page_indicator: "&7Page {page}"
   back_to_main_desc: "&7Click to return to category view"
   creator_exp: "&a&lXP: &f{exp}"
+  # Admin menu
+  admin_main_title: "&8Admin - Recipe Manager"
+  admin_list_title: "&8Admin - {category} ({page}/{total})"
+
+# Admin messages
+admin:
+  toggle_hidden: "&cRecipe hidden"
+  toggle_shown: "&aRecipe shown"
