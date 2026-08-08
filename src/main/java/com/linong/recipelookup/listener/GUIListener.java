@@ -62,14 +62,14 @@ public class GUIListener implements Listener {
         int raw = event.getRawSlot();
         int topSize = event.getView().getTopInventory().getSize();
 
-        // 配方详情 GUI：顶部只处理导航按钮，底部背包允许正常整理。
+        // 配方详情 GUI：整个界面只读，仅顶部导航按钮可触发操作。
         if (RecipeGUI.TYPE_DETAIL.equals(guiType)) {
             if (raw < 0) {
                 event.setCancelled(true);
                 return;
             }
             if (raw >= topSize) {
-                if (shouldBlockBottomTransfer(event)) event.setCancelled(true);
+                event.setCancelled(true);
                 return;
             }
 
@@ -136,13 +136,13 @@ public class GUIListener implements Listener {
             return;
         }
 
-        // 主菜单/配方列表：顶部完全只读；底部背包可正常整理。
+        // 主菜单/配方列表：顶部完全只读，底部玩家背包也禁止操作。
         if (raw < 0) {
             event.setCancelled(true);
             return;
         }
         if (raw >= topSize) {
-            if (shouldBlockBottomTransfer(event)) event.setCancelled(true);
+            event.setCancelled(true);
             return;
         }
         event.setCancelled(true);
@@ -189,13 +189,8 @@ public class GUIListener implements Listener {
             }
             return;
         }
-        // 浏览/详情 GUI：只阻止拖入顶部菜单，底部背包内拖动保持原版行为。
-        for (int raw : event.getRawSlots()) {
-            if (raw < topSize) {
-                event.setCancelled(true);
-                return;
-            }
-        }
+        // 浏览/详情 GUI：打开期间禁止在整个界面拖动物品。
+        event.setCancelled(true);
     }
 
     /** 阻止原版配方书在工作台/熔炉/锻造台详情 GUI 中填充物品 */
