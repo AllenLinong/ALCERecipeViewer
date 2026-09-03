@@ -90,6 +90,7 @@ public class GUIListener implements Listener {
                         case "PREV_RECIPE" -> gui.navigateRecipe(player, -1);
                         case "NEXT_RECIPE" -> gui.navigateRecipe(player, 1);
                     }
+                    runButtonTriggers(player, btn, event.getClick());
                 }
             }
             return;
@@ -115,7 +116,7 @@ public class GUIListener implements Listener {
                 ButtonDef btn = MenuConfig.buttonAt(menu, raw);
                 if (btn == null || !btn.dynamic()) {
                     event.setCancelled(true);
-                    if (btn != null && !btn.action().isEmpty()) {
+                    if (btn != null && (!btn.action().isEmpty() || !btn.triggers().isEmpty())) {
                         handleCreatorAction(player, event, btn);
                     }
                 }
@@ -153,9 +154,9 @@ public class GUIListener implements Listener {
         MenuDef menu = gui.getPlayerMenuDef(player.getUniqueId());
 
         switch (guiType) {
-            case RecipeGUI.TYPE_MAIN -> handleMainClick(player, slot, menu);
+            case RecipeGUI.TYPE_MAIN -> handleMainClick(player, slot, menu, event);
             case RecipeGUI.TYPE_LIST -> handleListClick(player, slot, menu, event);
-            case RecipeGUI.TYPE_ADMIN_MAIN -> handleAdminMainClick(player, slot, menu);
+            case RecipeGUI.TYPE_ADMIN_MAIN -> handleAdminMainClick(player, slot, menu, event);
             case RecipeGUI.TYPE_ADMIN_LIST -> handleAdminListClick(player, slot, menu, event);
         }
     }
@@ -306,14 +307,128 @@ public class GUIListener implements Listener {
         }
     }
 
+    private void runButtonTriggers(Player player, ButtonDef btn, ClickType click) {
+        List<String> actions = btn.triggers().get(triggerKey(click));
+        if (actions == null || actions.isEmpty()) return;
+
+        long delayTicks = 0L;
+        for (String configuredAction : actions) {
+            String action = configuredAction.trim();
+            String delayValue = actionValue(action, "delay", "wait");
+            if (delayValue != null) {
+                delayTicks += parseDelayTicks(delayValue);
+                continue;
+            }
+
+            long actionDelay = delayTicks;
+            if (actionDelay <= 0L) executeTriggerAction(player, action);
+            else plugin.getFoliaLib().getScheduler().runAtEntityLater(player,
+                    () -> executeTriggerAction(player, action), actionDelay);
+        }
+    }
+
+    private void executeTriggerAction(Player player, String configuredAction) {
+        if (!player.isOnline()) return;
+        int separator = configuredAction.indexOf(':');
+        if (separator < 0) return;
+
+        String type = configuredAction.substring(0, separator).trim().toLowerCase(Locale.ROOT);
+        String value = replaceCommandPlaceholders(configuredAction.substring(separator + 1).trim(), player);
+        switch (type) {
+            case "command" -> executeCommands(player, value, false, false);
+            case "op" -> executeCommands(player, value, true, false);
+            case "console" -> executeCommands(player, value, false, true);
+        }
+    }
+
+    private void executeCommands(Player player, String commands, boolean temporaryOp, boolean console) {
+        List<String> commandList = Arrays.stream(commands.split(";"))
+                .map(String::trim)
+                .filter(command -> !command.isEmpty())
+                .map(this::stripLeadingSlash)
+                .toList();
+        if (commandList.isEmpty()) return;
+
+        if (console) {
+            for (String command : commandList) Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+            return;
+        }
+
+        boolean wasOp = player.isOp();
+        try {
+            if (temporaryOp && !wasOp) player.setOp(true);
+            for (String command : commandList) {
+                if (!player.isOnline()) break;
+                Bukkit.dispatchCommand(player, command);
+            }
+        } finally {
+            if (temporaryOp && !wasOp && player.isOp()) player.setOp(false);
+        }
+    }
+
+    private String replaceCommandPlaceholders(String command, Player player) {
+        return command
+                .replace("{player}", player.getName())
+                .replace("%player_name%", player.getName())
+                .replace("{uuid}", player.getUniqueId().toString())
+                .replace("%player_uuid%", player.getUniqueId().toString())
+                .replace("{world}", player.getWorld().getName())
+                .replace("%world%", player.getWorld().getName());
+    }
+
+    private String stripLeadingSlash(String command) {
+        return command.startsWith("/") ? command.substring(1).trim() : command;
+    }
+
+    private String triggerKey(ClickType click) {
+        return switch (click) {
+            case SHIFT_LEFT -> "shift_left";
+            case SHIFT_RIGHT -> "shift_right";
+            case RIGHT -> "right";
+            default -> "left";
+        };
+    }
+
+    private String actionValue(String action, String... types) {
+        int separator = action.indexOf(':');
+        if (separator < 0) return null;
+        String type = action.substring(0, separator).trim();
+        for (String expected : types) {
+            if (type.equalsIgnoreCase(expected)) return action.substring(separator + 1).trim();
+        }
+        return null;
+    }
+
+    private long parseDelayTicks(String value) {
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        try {
+            if (normalized.endsWith("ms")) {
+                return Math.max(0L, (long) Math.ceil(Double.parseDouble(
+                        normalized.substring(0, normalized.length() - 2)) / 50.0D));
+            }
+            if (normalized.endsWith("t")) {
+                return Math.max(0L, (long) Math.ceil(Double.parseDouble(
+                        normalized.substring(0, normalized.length() - 1))));
+            }
+            if (normalized.endsWith("s")) {
+                return Math.max(0L, (long) Math.ceil(Double.parseDouble(
+                        normalized.substring(0, normalized.length() - 1)) * 20.0D));
+            }
+            return Math.max(0L, Long.parseLong(normalized));
+        } catch (NumberFormatException ignored) {
+            return 0L;
+        }
+    }
+
     // ========== 主菜单 ==========
 
-    private void handleMainClick(Player player, int slot, MenuDef menu) {
+    private void handleMainClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
         if (menu == null) return;
         ButtonDef btn = MenuConfig.buttonAt(menu, slot);
-        if (btn == null || btn.action().isEmpty()) return;
+        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
 
         playButtonSound(player, btn);
+        runButtonTriggers(player, btn, event.getClick());
 
         switch (btn.action()) {
             case "OPEN_CATEGORY" -> {
@@ -368,9 +483,10 @@ public class GUIListener implements Listener {
 
         // 导航按钮
         ButtonDef btn = menu.buttons().get(c);
-        if (btn == null || btn.action().isEmpty()) return;
+        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
 
         playButtonSound(player, btn);
+        runButtonTriggers(player, btn, event.getClick());
 
         switch (btn.action()) {
             case "RUN_COMMAND" -> runButtonCommand(player, btn);
@@ -410,12 +526,13 @@ public class GUIListener implements Listener {
 
     // ========== 管理员主菜单 ==========
 
-    private void handleAdminMainClick(Player player, int slot, MenuDef menu) {
+    private void handleAdminMainClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
         if (menu == null) return;
         ButtonDef btn = MenuConfig.buttonAt(menu, slot);
-        if (btn == null || btn.action().isEmpty()) return;
+        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
 
         playButtonSound(player, btn);
+        runButtonTriggers(player, btn, event.getClick());
 
         switch (btn.action()) {
             case "OPEN_CATEGORY" -> {
@@ -469,9 +586,10 @@ public class GUIListener implements Listener {
         }
 
         ButtonDef btn = menu.buttons().get(c);
-        if (btn == null || btn.action().isEmpty()) return;
+        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
 
         playButtonSound(player, btn);
+        runButtonTriggers(player, btn, event.getClick());
 
         switch (btn.action()) {
             case "RUN_COMMAND" -> runButtonCommand(player, btn);
@@ -525,8 +643,9 @@ public class GUIListener implements Listener {
     }
 
     private void handleCreatorAction(Player player, InventoryClickEvent event, ButtonDef btn) {
-        if (btn == null || btn.action().isEmpty()) return;
+        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
         playButtonSound(player, btn);
+        runButtonTriggers(player, btn, event.getClick());
         switch (btn.action()) {
             case "RUN_COMMAND" -> runButtonCommand(player, btn);
             case "CREATOR_SHAPED" -> gui.openRecipeCreator(player, "shaped");

@@ -162,8 +162,21 @@ public class MenuConfig {
         String sound = s.getString("sound", "block.note_block.pling");
         String command = s.getString("command", "");
         boolean asPlayer = s.getBoolean("as_player", true);
+        Map<String, List<String>> triggers = new LinkedHashMap<>();
+        ConfigurationSection triggerSection = s.getConfigurationSection("triggers");
+        if (triggerSection != null) {
+            for (String trigger : triggerSection.getKeys(false)) {
+                List<String> actions = triggerSection.getStringList(trigger).stream()
+                        .filter(Objects::nonNull)
+                        .map(String::trim)
+                        .filter(actionEntry -> !actionEntry.isEmpty())
+                        .toList();
+                if (!actions.isEmpty()) triggers.put(trigger.toLowerCase(Locale.ROOT), actions);
+            }
+        }
 
-        return new ButtonDef(mat, name, lore, action, category, dynamic, ceItem, sound, command, asPlayer);
+        return new ButtonDef(mat, name, lore, action, category, dynamic, ceItem, sound, command,
+                asPlayer, Map.copyOf(triggers));
     }
 
     // ==================== 槽位计算 ====================
@@ -315,7 +328,8 @@ public class MenuConfig {
 
     public record ButtonDef(Material material, String name, List<String> lore,
                             String action, String category, boolean dynamic,
-                            String ceItem, String sound, String command, boolean asPlayer) {
+                            String ceItem, String sound, String command, boolean asPlayer,
+                            Map<String, List<String>> triggers) {
         /** CE 物品 ID（如 internal:cooking_info），null 表示使用标准 Material */
         public String ceItem() { return ceItem; }
         /** 按钮点击声音（原版 Sound 键名或 CE 自定义声音 ID），默认 "block.note_block.pling" */
@@ -324,6 +338,14 @@ public class MenuConfig {
         public String command() { return command; }
         /** 命令以谁的身份执行：true=玩家，false=控制台 */
         public boolean asPlayer() { return asPlayer; }
+        public Map<String, List<String>> triggers() { return triggers; }
+
+        public ButtonDef(Material material, String name, List<String> lore,
+                         String action, String category, boolean dynamic,
+                         String ceItem, String sound, String command, boolean asPlayer) {
+            this(material, name, lore, action, category, dynamic, ceItem, sound, command,
+                    asPlayer, Map.of());
+        }
 
         /** 便利构造器（无 sound/command） */
         public ButtonDef(Material material, String name, List<String> lore,

@@ -20,6 +20,13 @@
 #   category: 分类 ID（action=OPEN_CATEGORY 时需要）
 #   command: 自定义命令（action=RUN_COMMAND 时生效，不带 /）
 #   as_player: true=以玩家身份执行，false=控制台（{player}=玩家名）
+#   triggers: 自定义点击动作，支持 left/right/shift_left/shift_right
+#     command: 命令  - 玩家身份执行
+#     op: 命令       - 临时 OP 身份执行，执行后恢复原权限
+#     console: 命令  - 控制台身份执行
+#     delay: 20      - 延迟后续动作，支持 20、20t、1s、500ms（wait 同义）
+#   同一动作可用英文分号分隔多条命令；命令开头的 / 可写可不写
+#   占位符: {player}/%player_name%、{uuid}/%player_uuid%、{world}/%world%
 #   sound: 点击音效，支持原版声音（如 block.note_block.pling）或 CE 自定义声音（如 namespace:sound_id）
 #          不填默认使用 block.note_block.pling
 # ============================================================
@@ -134,10 +141,17 @@ main_menu:
     #  material: "BOOK"
     #  name: "&6Wiki"
     #  lore:
-    #    - "&7打开Wiki页面"
-    #  action: "RUN_COMMAND"
-    #  command: "wiki open"
-    #  as_player: true
+    #    - "&7左键打开 Wiki"
+    #    - "&7右键返回主城"
+    #  triggers:
+    #    left:
+    #      - "command: wiki open"
+    #      - "delay: 10"
+    #      - "console: tell {player} Wiki 命令已执行"
+    #    right:
+    #      - "op: spawn"
+    #    shift_left:
+    #      - "console: say {player} 点击了自定义菜单按钮; give {player} paper 1"
     #  sound: "block.note_block.pling"
 
 # ===== 配方列表（分类浏览）=====

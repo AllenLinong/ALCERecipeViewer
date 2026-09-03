@@ -28,6 +28,8 @@
 | 🛡️ **防刷物品** | 全部使用箱子 GUI，无原版 recipe book 漏洞 |
 | ⚡ **Folia 兼容** | FoliaLib shade 重定位，全局/区域/异步调度器全兼容 |
 | 🏷️ **自定义名称** | `lang.yml` 支持手动配置 CE 物品中文名用于搜索 |
+| 🧩 **自定义菜单按钮** | `menu.yml` 支持按点击类型执行玩家、临时 OP 或控制台命令，并支持多命令与延时动作 |
+| 👁️ **配方可见性管理** | 管理员可单独隐藏配方，普通玩家不会在浏览或搜索结果中看到 |
 
 ---
 
@@ -69,6 +71,7 @@
 | `/alcerecipes reload` | `alcerecipeviewer.admin` | 重新加载 CE 配方数据 |
 | `/alcerecipes clear` | `alcerecipeviewer.admin` | 清空配方缓存 |
 | `/alcerecipes create` | `alcerecipeviewer.admin` | 打开配方编辑器（GUI） |
+| `/alcerecipes admin` / `manage` | `alcerecipeviewer.admin` | 打开配方可见性管理菜单 |
 
 ### 权限节点
 
@@ -86,3 +89,17 @@
 ```yaml
 features:
   debug: false  # 调试模式：点击配方显示名称解析信息
+```
+
+---
+
+## 📝 更新日志
+
+### v1.0.7
+
+- **配方可见性管理**：新增管理员菜单，可显示/隐藏指定配方；隐藏状态保存至 `hidden_recipes.yml`，重启与 `/alcerecipes reload` 后仍会保留。
+- **管理员浏览**：`/alcerecipes admin`（或 `manage`）可查看全部配方及各分类隐藏数量；点击配方即可切换可见性并刷新页面。
+- **玩家配方过滤**：被隐藏的配方不会出现在普通玩家的分类浏览或搜索结果中；管理员仍可查看全部配方。
+- **CraftEngine 兼容性**：改进核心实例识别与 CE 类加载，兼容官方核心、Paper bootstrap 和 Bukkit/Spigot 插件外壳。
+- **CraftEngine 重载同步**：支持 CE 26.7 的重载事件；CE 完成加载或重载后自动刷新配方、翻译及名称缓存，并避免并发刷新覆盖数据。
+- **多语言与错误处理**：名称缓存按“语言 + 物品 ID”隔离，改善中英文切换；物品转换失败时减少重复日志并提供更准确的降级处理。
