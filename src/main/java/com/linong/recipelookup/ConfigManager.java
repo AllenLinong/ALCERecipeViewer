@@ -13,6 +13,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,6 +32,8 @@ public class ConfigManager {
     private boolean debug;
     private int multiRecipeCycleSeconds;
     private String language;
+    private double buttonCooldownSeconds;
+    private String defaultButtonSound;
 
     // lang.yml
     private String pluginPrefix;
@@ -57,6 +60,8 @@ public class ConfigManager {
         debug = mainConfig.getBoolean("features.debug", false);
         multiRecipeCycleSeconds = mainConfig.getInt("features.multi-recipe-cycle-seconds", 5);
         language = mainConfig.getString("language", "zh_cn");
+        buttonCooldownSeconds = Math.max(0.0D, mainConfig.getDouble("features.button-cooldown-seconds", 0.3D));
+        defaultButtonSound = mainConfig.getString("features.default-button-sound", "block.note_block.pling");
 
         // 按配置语言加载语言文件
         String langPath = "lang/" + language + ".yml";
@@ -128,22 +133,26 @@ public class ConfigManager {
 
     // ==================== YAML 合并 ====================
 
-    /** 将 jar 内默认 YAML 的新键合并到磁盘文件（保留用户已有设置） */
+    /** 将 jar 内默认 YAML 的新键合并到磁盘文件（保留用户已有设置，新键连同注释写入） */
     public void mergeYamlDefaults(File diskFile, String jarResourcePath) {
         InputStream in = plugin.getResource(jarResourcePath);
         if (in == null) return;
         try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
             YamlConfiguration jarDefaults = YamlConfiguration.loadConfiguration(reader);
             YamlConfiguration disk = YamlConfiguration.loadConfiguration(diskFile);
-            boolean changed = mergeSection(disk, jarDefaults);
+            boolean changed = mergeDefaults(disk, jarDefaults);
             if (changed) disk.save(diskFile);
         } catch (IOException e) {
             plugin.getLogger().warning("配置文件合并失败: " + diskFile.getName() + " - " + e.getMessage());
         }
     }
 
-    /** 递归合并：target 中不存在的键才从 source 写入 */
-    private boolean mergeSection(ConfigurationSection target, ConfigurationSection source) {
+    /** 递归合并：target 中不存在的键才从 source 写入，新键的注释一并复制。静态纯函数，便于单测 */
+    static boolean mergeDefaults(ConfigurationSection target, ConfigurationSection source) {
+        return mergeSection(target, source);
+    }
+
+    private static boolean mergeSection(ConfigurationSection target, ConfigurationSection source) {
         boolean changed = false;
         Set<String> keys = source.getKeys(false);
         for (String key : keys) {
@@ -155,12 +164,36 @@ public class ConfigManager {
                             source.getConfigurationSection(key));
                 }
                 // 否则跳过（保留用户值）
+            } else if (source.isConfigurationSection(key)) {
+                // 新增的节：先建空节（带注释），再逐叶子填入，保证每个新键都带注释
+                target.createSection(key);
+                copyComments(target, key, source);
+                changed = true;
+                changed |= mergeSection(
+                        target.getConfigurationSection(key),
+                        source.getConfigurationSection(key));
             } else {
                 target.set(key, source.get(key));
+                copyComments(target, key, source);
                 changed = true;
             }
         }
         return changed;
+    }
+
+    /** 把 source 节中 key 的注释复制到 target 节的同名 key（核心不支持注释 API 时静默降级） */
+    private static void copyComments(ConfigurationSection target, String key, ConfigurationSection source) {
+        try {
+            List<String> comments = source.getComments(key);
+            if (comments != null && !comments.isEmpty()) {
+                target.setComments(key, comments);
+            }
+            List<String> inline = source.getInlineComments(key);
+            if (inline != null && !inline.isEmpty()) {
+                target.setInlineComments(key, inline);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     // ==================== 搜索模式 ====================
@@ -169,6 +202,12 @@ public class ConfigManager {
     public String getSearchModeIngredient() { return color(langConfig.getString("menu.search_mode_ingredient", "&7搜索模式: &e材料名称")); }
 
     public boolean isDebug() { return debug; }
+
+    /** 菜单按钮点击冷却（秒），0 = 关闭 */
+    public double getButtonCooldownSeconds() { return buttonCooldownSeconds; }
+
+    /** 按钮未配置音效时的默认点击音 */
+    public String getDefaultButtonSound() { return defaultButtonSound; }
     public int getMultiRecipeCycleSeconds() { return Math.max(1, multiRecipeCycleSeconds); }
     public String getLanguage() { return language; }
     /** 从语言文件读取指定路径的文本 */

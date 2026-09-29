@@ -1,0 +1,13 @@
+# Maven
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 插件运行时产物
+*.bak
+
+# 本地工具
+.agents/

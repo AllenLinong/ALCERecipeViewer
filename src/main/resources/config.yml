@@ -12,3 +12,7 @@ features:
   debug: false
   # 多配方轮播间隔（秒）：同一物品有多个合成配方时，详情页每隔此秒数自动切换
   multi-recipe-cycle-seconds: 10
+  # 菜单按钮点击冷却（秒），防连点重复触发，0 = 关闭
+  button-cooldown-seconds: 0.3
+  # 按钮未配置音效时的默认点击音（原版键名或 CE 自定义声音 ID）
+  default-button-sound: block.note_block.pling

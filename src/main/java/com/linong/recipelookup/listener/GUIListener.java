@@ -1,15 +1,12 @@
 package com.linong.recipelookup.listener;
 
 import com.linong.recipelookup.ALCERecipeViewer;
-import com.linong.recipelookup.ConfigManager;
 import com.linong.recipelookup.MenuConfig;
 import com.linong.recipelookup.MenuConfig.ButtonDef;
 import com.linong.recipelookup.MenuConfig.MenuDef;
-import com.linong.recipelookup.bridge.CEBridge;
+import com.linong.recipelookup.gui.MenuClickService;
 import com.linong.recipelookup.gui.RecipeGUI;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
-import org.bukkit.SoundCategory;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -29,21 +26,22 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.*;
+import java.util.UUID;
 
 /**
- * GUI 事件监听器。禁止取放物品，根据按钮 action 路由点击。
+ * GUI 事件监听器。禁止取放物品；按钮点击统一经 MenuClickService
+ * （PDC 动作 → 冷却 → 音效 → 动作执行器）路由，业务动作见 MenuActionRouter。
  */
 public class GUIListener implements Listener {
 
     private final ALCERecipeViewer plugin;
     private final RecipeGUI gui;
-    private final ConfigManager config;
+    private final MenuClickService clickService;
 
     public GUIListener(ALCERecipeViewer plugin) {
         this.plugin = plugin;
         this.gui = plugin.getRecipeGUI();
-        this.config = plugin.getConfigManager();
+        this.clickService = new MenuClickService(plugin, this.gui);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -60,43 +58,17 @@ public class GUIListener implements Listener {
         }
         String guiType = gui.getInventoryType(uuid, topInventory);
         int raw = event.getRawSlot();
-        int topSize = event.getView().getTopInventory().getSize();
+        int topSize = topInventory.getSize();
 
-        // 配方详情 GUI：整个界面只读，仅顶部导航按钮可触发操作。
-        if (RecipeGUI.TYPE_DETAIL.equals(guiType)) {
-            if (raw < 0) {
-                event.setCancelled(true);
-                return;
-            }
-            if (raw >= topSize) {
-                event.setCancelled(true);
-                return;
-            }
-
+        // 配方详情 GUI：整个界面只读，仅导航按钮可触发操作。
+        if (RecipeGUI.TYPE_DETAIL.equals(guiType) || RecipeGUI.TYPE_ADMIN_DETAIL.equals(guiType)) {
             event.setCancelled(true);
-            MenuDef detailMenu = gui.getPlayerMenuDef(player.getUniqueId());
-            if (detailMenu != null) {
-                ButtonDef btn = MenuConfig.buttonAt(detailMenu, raw);
-                if (btn != null) {
-                    playButtonSound(player, btn);
-                    switch (btn.action()) {
-                        case "RUN_COMMAND" -> runButtonCommand(player, btn);
-                        case "BACK" -> {
-                            gui.stopRecipeCycle(player);
-                            String cat = gui.getPlayerCategory(player.getUniqueId());
-                            int page = gui.getPlayerPage(player.getUniqueId());
-                            if (cat != null) gui.openRecipeList(player, cat, page);
-                        }
-                        case "PREV_RECIPE" -> gui.navigateRecipe(player, -1);
-                        case "NEXT_RECIPE" -> gui.navigateRecipe(player, 1);
-                    }
-                    runButtonTriggers(player, btn, event.getClick());
-                }
-            }
+            if (raw < 0 || raw >= topSize) return;
+            routeButton(player, event, guiType);
             return;
         }
 
-        // creator：Paper 1.21 原生拖拽模式（参照 KitEditorListener）
+        // creator：Paper 1.21 原生拖拽模式，I/R 动态槽放行
         if ("creator".equals(guiType)) {
             if (raw < 0) {
                 event.setCancelled(true);
@@ -111,53 +83,40 @@ public class GUIListener implements Listener {
                 return;
             }
             // top inventory: 只放行创建器声明过的动态输入槽。
-            MenuDef menu = getCreatorMenu(player);
-            if (menu != null) {
-                ButtonDef btn = MenuConfig.buttonAt(menu, raw);
-                if (btn == null || !btn.dynamic()) {
-                    event.setCancelled(true);
-                    if (btn != null && (!btn.action().isEmpty() || !btn.triggers().isEmpty())) {
-                        handleCreatorAction(player, event, btn);
-                    }
-                }
-                // I/R dynamic → 不取消，Paper 原生处理
-            } else {
+            MenuDef menu = gui.getCreatorMenuFor(uuid);
+            ButtonDef btn = menu != null ? MenuConfig.buttonAt(menu, raw) : null;
+            if (btn == null || !btn.dynamic()) {
                 event.setCancelled(true);
+                routeButton(player, event, guiType);
             }
+            // I/R dynamic → 不取消，Paper 原生处理
             return;
         }
         if ("creator_type".equals(guiType)) {
             event.setCancelled(true);
             if (raw >= topSize || raw < 0) return;
-            MenuDef menu = plugin.getMenuConfig().getRecipeCreatorType();
-            if (menu != null) {
-                ButtonDef btn = MenuConfig.buttonAt(menu, raw);
-                if (btn != null) handleCreatorAction(player, event, btn);
-            }
+            routeButton(player, event, guiType);
             return;
         }
 
-        // 主菜单/配方列表：顶部完全只读，底部玩家背包也禁止操作。
-        if (raw < 0) {
-            event.setCancelled(true);
-            return;
-        }
-        if (raw >= topSize) {
-            event.setCancelled(true);
-            return;
-        }
+        // 主菜单/配方列表（含管理端）：顶部完全只读，底部玩家背包也禁止操作。
         event.setCancelled(true);
+        if (raw < 0 || raw >= topSize) return;
 
-        if (event.getCurrentItem() == null || event.getCurrentItem().getType() == Material.AIR) return;
+        ItemStack clicked = event.getCurrentItem();
+        if (clicked == null || clicked.getType() == Material.AIR) return;
 
-        int slot = event.getSlot();
-        MenuDef menu = gui.getPlayerMenuDef(player.getUniqueId());
+        // 按钮优先走 PDC 动作；配方列表动态区（'I'）合成 recipe_entry 动作
+        if (routeButton(player, event, guiType)) return;
 
-        switch (guiType) {
-            case RecipeGUI.TYPE_MAIN -> handleMainClick(player, slot, menu, event);
-            case RecipeGUI.TYPE_LIST -> handleListClick(player, slot, menu, event);
-            case RecipeGUI.TYPE_ADMIN_MAIN -> handleAdminMainClick(player, slot, menu, event);
-            case RecipeGUI.TYPE_ADMIN_LIST -> handleAdminListClick(player, slot, menu, event);
+        if (RecipeGUI.TYPE_LIST.equals(guiType) || RecipeGUI.TYPE_ADMIN_LIST.equals(guiType)) {
+            MenuDef menu = gui.getPlayerMenuDef(uuid);
+            if (menu == null) return;
+            ButtonDef btn = MenuConfig.buttonAt(menu, event.getSlot());
+            if (btn != null && btn.dynamic()) {
+                clickService.handleSynthesized(player, "recipe_entry", event.getClick(),
+                        guiType, raw, event.getSlot());
+            }
         }
     }
 
@@ -173,16 +132,19 @@ public class GUIListener implements Listener {
             return;
         }
         String type = gui.getInventoryType(uuid, topInventory);
-        int topSize = event.getView().getTopInventory().getSize();
+        int topSize = topInventory.getSize();
 
         if ("creator_type".equals(type)) { event.setCancelled(true); return; }
         if ("creator".equals(type)) {
-            MenuDef menu = getCreatorMenu(player);
+            MenuDef menu = gui.getCreatorMenuFor(uuid);
             if (menu != null) {
                 for (int raw : event.getRawSlots()) {
-                    if (raw < topSize && !isCreatorInputSlot(menu, raw)) {
-                        event.setCancelled(true);
-                        return;
+                    if (raw < topSize) {
+                        ButtonDef btn = MenuConfig.buttonAt(menu, raw);
+                        if (btn == null || !btn.dynamic()) {
+                            event.setCancelled(true);
+                            return;
+                        }
                     }
                 }
             } else {
@@ -242,6 +204,7 @@ public class GUIListener implements Listener {
         Inventory closed = event.getInventory();
         if (!gui.isOurGUI(player.getUniqueId(), closed)) return;
         scheduleGUIItemCleanup(player, true);
+        clickService.clearCooldowns(player.getUniqueId());
         if (!gui.isCurrentGUI(player.getUniqueId(), closed)) return;
 
         String type = gui.getInventoryType(player.getUniqueId(), closed);
@@ -250,7 +213,7 @@ public class GUIListener implements Listener {
             gui.removePlayer(player.getUniqueId());
         } else if ("creator".equals(type)) {
             if (!gui.pendingExpInput.containsKey(player.getUniqueId())) {
-                returnCreatorItems(player, closed);
+                gui.returnCreatorItems(player, closed);
             }
             gui.removePlayer(player.getUniqueId());
         } else {
@@ -273,450 +236,32 @@ public class GUIListener implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         gui.discardPlayer(player.getUniqueId());
+        clickService.clearCooldowns(player.getUniqueId());
         scheduleGUIItemCleanup(player, true);
     }
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         plugin.getChatSearchListener().cancelSearch(event.getPlayer());
+        clickService.clearCooldowns(event.getPlayer().getUniqueId());
         gui.discardPlayer(event.getPlayer().getUniqueId());
     }
 
-    // ========== 按钮声音 ==========
+    // ========== 点击路由 ==========
 
-    /** 播放按钮点击声音。支持原版 Sound 键名和 CE 自定义声音 ID（如 namespace:sound_id）。 */
-    private void playButtonSound(Player player, ButtonDef btn) {
-        if (btn == null || btn.sound() == null || btn.sound().isEmpty()) return;
-        String key = btn.sound();
-        try {
-            player.playSound(player.getLocation(), key, SoundCategory.MASTER, 1.0f, 1.0f);
-        } catch (Exception ignored) {
-            // 自定义声音可能未注册，静默忽略
-        }
-    }
-
-    /** 执行按钮的自定义命令 */
-    private void runButtonCommand(Player player, ButtonDef btn) {
-        String cmd = btn.command();
-        if (cmd == null || cmd.isEmpty()) return;
-        if (btn.asPlayer()) {
-            player.performCommand(cmd);
-        } else {
-            Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
-                    cmd.replace("{player}", player.getName()));
-        }
-    }
-
-    private void runButtonTriggers(Player player, ButtonDef btn, ClickType click) {
-        List<String> actions = btn.triggers().get(triggerKey(click));
-        if (actions == null || actions.isEmpty()) return;
-
-        long delayTicks = 0L;
-        for (String configuredAction : actions) {
-            String action = configuredAction.trim();
-            String delayValue = actionValue(action, "delay", "wait");
-            if (delayValue != null) {
-                delayTicks += parseDelayTicks(delayValue);
-                continue;
-            }
-
-            long actionDelay = delayTicks;
-            if (actionDelay <= 0L) executeTriggerAction(player, action);
-            else plugin.getFoliaLib().getScheduler().runAtEntityLater(player,
-                    () -> executeTriggerAction(player, action), actionDelay);
-        }
-    }
-
-    private void executeTriggerAction(Player player, String configuredAction) {
-        if (!player.isOnline()) return;
-        int separator = configuredAction.indexOf(':');
-        if (separator < 0) return;
-
-        String type = configuredAction.substring(0, separator).trim().toLowerCase(Locale.ROOT);
-        String value = replaceCommandPlaceholders(configuredAction.substring(separator + 1).trim(), player);
-        switch (type) {
-            case "command" -> executeCommands(player, value, false, false);
-            case "op" -> executeCommands(player, value, true, false);
-            case "console" -> executeCommands(player, value, false, true);
-        }
-    }
-
-    private void executeCommands(Player player, String commands, boolean temporaryOp, boolean console) {
-        List<String> commandList = Arrays.stream(commands.split(";"))
-                .map(String::trim)
-                .filter(command -> !command.isEmpty())
-                .map(this::stripLeadingSlash)
-                .toList();
-        if (commandList.isEmpty()) return;
-
-        if (console) {
-            for (String command : commandList) Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
-            return;
-        }
-
-        boolean wasOp = player.isOp();
-        try {
-            if (temporaryOp && !wasOp) player.setOp(true);
-            for (String command : commandList) {
-                if (!player.isOnline()) break;
-                Bukkit.dispatchCommand(player, command);
-            }
-        } finally {
-            if (temporaryOp && !wasOp && player.isOp()) player.setOp(false);
-        }
-    }
-
-    private String replaceCommandPlaceholders(String command, Player player) {
-        return command
-                .replace("{player}", player.getName())
-                .replace("%player_name%", player.getName())
-                .replace("{uuid}", player.getUniqueId().toString())
-                .replace("%player_uuid%", player.getUniqueId().toString())
-                .replace("{world}", player.getWorld().getName())
-                .replace("%world%", player.getWorld().getName());
-    }
-
-    private String stripLeadingSlash(String command) {
-        return command.startsWith("/") ? command.substring(1).trim() : command;
-    }
-
-    private String triggerKey(ClickType click) {
-        return switch (click) {
-            case SHIFT_LEFT -> "shift_left";
-            case SHIFT_RIGHT -> "shift_right";
-            case RIGHT -> "right";
-            default -> "left";
-        };
-    }
-
-    private String actionValue(String action, String... types) {
-        int separator = action.indexOf(':');
-        if (separator < 0) return null;
-        String type = action.substring(0, separator).trim();
-        for (String expected : types) {
-            if (type.equalsIgnoreCase(expected)) return action.substring(separator + 1).trim();
-        }
-        return null;
-    }
-
-    private long parseDelayTicks(String value) {
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        try {
-            if (normalized.endsWith("ms")) {
-                return Math.max(0L, (long) Math.ceil(Double.parseDouble(
-                        normalized.substring(0, normalized.length() - 2)) / 50.0D));
-            }
-            if (normalized.endsWith("t")) {
-                return Math.max(0L, (long) Math.ceil(Double.parseDouble(
-                        normalized.substring(0, normalized.length() - 1))));
-            }
-            if (normalized.endsWith("s")) {
-                return Math.max(0L, (long) Math.ceil(Double.parseDouble(
-                        normalized.substring(0, normalized.length() - 1)) * 20.0D));
-            }
-            return Math.max(0L, Long.parseLong(normalized));
-        } catch (NumberFormatException ignored) {
-            return 0L;
-        }
-    }
-
-    // ========== 主菜单 ==========
-
-    private void handleMainClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
-        if (menu == null) return;
-        ButtonDef btn = MenuConfig.buttonAt(menu, slot);
-        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
-
-        playButtonSound(player, btn);
-        runButtonTriggers(player, btn, event.getClick());
-
-        switch (btn.action()) {
-            case "OPEN_CATEGORY" -> {
-                if (!btn.category().isEmpty()) {
-                    gui.openRecipeList(player, btn.category(), 0);
-                }
-            }
-            case "RUN_COMMAND" -> runButtonCommand(player, btn);
-            case "CLOSE" -> player.closeInventory();
-        }
-    }
-
-    // ========== 配方列表 ==========
-
-    private void handleListClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
-        if (menu == null) return;
-
-        String categoryId = gui.getPlayerCategory(player.getUniqueId());
-        if (categoryId == null) return;
-        int page = gui.getPlayerPage(player.getUniqueId());
-
-        // 获取槽位对应的按钮定义
-        int row = slot / 9;
-        int col = slot % 9;
-        if (row >= menu.shape().length) return;
-        String line = menu.shape()[row];
-        if (col >= line.length()) return;
-        char c = line.charAt(col);
-
-        if (c == 'I') {
-            // 动态物品区 → 打开配方详情（使用 openRecipeList 缓存的排序结果，避免重复排序）
-            java.util.Locale locale = gui.resolveLocale();
-            List<CEBridge.RecipeData> recipes = gui.getPlayerRecipes(player.getUniqueId());
-            if (recipes == null) {
-                recipes = gui.getSortedRecipes(categoryId,
-                        gui.getSearchQuery(player.getUniqueId()), locale, player.getUniqueId());
-            }
-
-            List<Integer> itemSlots = MenuConfig.itemSlots(menu.shape());
-            int itemIndex = itemSlots.indexOf(slot);
-            if (itemIndex < 0) return;
-
-            int pageSize = itemSlots.size();
-            int recipeIdx = page * pageSize + itemIndex;
-            if (recipeIdx < recipes.size()) {
-                CEBridge.RecipeData recipe = recipes.get(recipeIdx);
-                if (config.isDebug()) debugRecipeClick(player, recipe);
-                gui.openRecipeDetail(player, recipe, categoryId, page);
-            }
-            return;
-        }
-
-        // 导航按钮
-        ButtonDef btn = menu.buttons().get(c);
-        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
-
-        playButtonSound(player, btn);
-        runButtonTriggers(player, btn, event.getClick());
-
-        switch (btn.action()) {
-            case "RUN_COMMAND" -> runButtonCommand(player, btn);
-            case "PREV_PAGE" -> {
-                if (page > 0) gui.openRecipeList(player, categoryId, page - 1);
-            }
-            case "NEXT_PAGE" -> {
-                java.util.Locale locale = gui.resolveLocale();
-                List<CEBridge.RecipeData> recipes = gui.getSortedRecipes(categoryId,
-                        gui.getSearchQuery(player.getUniqueId()), locale, player.getUniqueId());
-                int pageSize = MenuConfig.itemSlots(menu.shape()).size();
-                int totalPages = Math.max(1, (recipes.size() + pageSize - 1) / pageSize);
-                if (page < totalPages - 1) gui.openRecipeList(player, categoryId, page + 1);
-            }
-            case "SEARCH" -> handleSearchClick(player, categoryId, event);
-            case "BACK_TO_MAIN" -> gui.openMainMenu(player);
-            case "CREATE_RECIPE" -> {
-                if (player.hasPermission("alcerecipeviewer.admin")) gui.openRecipeCreatorType(player);
-                else player.sendMessage(config.getPluginPrefix() + " " + config.getCreatorAdminOnly());
-            }
-            case "CLOSE" -> player.closeInventory();
-        }
-    }
-
-    private void handleSearchClick(Player player, String categoryId, InventoryClickEvent event) {
-        ClickType click = event.getClick();
-        if (click == ClickType.SHIFT_LEFT) {
-            gui.clearSearch(player);
-            plugin.getChatSearchListener().cancelSearch(player);
-        } else if (click == ClickType.RIGHT) {
-            gui.toggleSearchMode(player);
-        } else {
-            String mode = gui.getSearchMode(player.getUniqueId());
-            plugin.getChatSearchListener().expectSearch(player, categoryId, mode);
-        }
-    }
-
-    // ========== 管理员主菜单 ==========
-
-    private void handleAdminMainClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
-        if (menu == null) return;
-        ButtonDef btn = MenuConfig.buttonAt(menu, slot);
-        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
-
-        playButtonSound(player, btn);
-        runButtonTriggers(player, btn, event.getClick());
-
-        switch (btn.action()) {
-            case "OPEN_CATEGORY" -> {
-                if (!btn.category().isEmpty()) {
-                    gui.openAdminRecipeList(player, btn.category(), 0);
-                }
-            }
-            case "RUN_COMMAND" -> runButtonCommand(player, btn);
-            case "CLOSE" -> player.closeInventory();
-        }
-    }
-
-    // ========== 管理员配方列表 ==========
-
-    private void handleAdminListClick(Player player, int slot, MenuDef menu, InventoryClickEvent event) {
-        if (menu == null) return;
-
-        String categoryId = gui.getPlayerCategory(player.getUniqueId());
-        if (categoryId == null) return;
-        int page = gui.getPlayerPage(player.getUniqueId());
-
-        int row = slot / 9;
-        int col = slot % 9;
-        if (row >= menu.shape().length) return;
-        String line = menu.shape()[row];
-        if (col >= line.length()) return;
-        char c = line.charAt(col);
-
-        if (c == 'I') {
-            java.util.Locale locale = gui.resolveLocale();
-            List<CEBridge.RecipeData> recipes = gui.getPlayerRecipes(player.getUniqueId());
-            if (recipes == null) {
-                recipes = gui.getSortedRecipesAdmin(categoryId,
-                        gui.getSearchQuery(player.getUniqueId()), locale, player.getUniqueId());
-            }
-
-            List<Integer> itemSlots = MenuConfig.itemSlots(menu.shape());
-            int itemIndex = itemSlots.indexOf(slot);
-            if (itemIndex < 0) return;
-
-            int pageSize = itemSlots.size();
-            int recipeIdx = page * pageSize + itemIndex;
-            if (recipeIdx < recipes.size()) {
-                CEBridge.RecipeData recipe = recipes.get(recipeIdx);
-                // 点击切换可见性
-                gui.toggleRecipeVisibility(player, recipe);
-                // 刷新当前页面
-                gui.openAdminRecipeList(player, categoryId, page);
-            }
-            return;
-        }
-
-        ButtonDef btn = menu.buttons().get(c);
-        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
-
-        playButtonSound(player, btn);
-        runButtonTriggers(player, btn, event.getClick());
-
-        switch (btn.action()) {
-            case "RUN_COMMAND" -> runButtonCommand(player, btn);
-            case "PREV_PAGE" -> {
-                if (page > 0) gui.openAdminRecipeList(player, categoryId, page - 1);
-            }
-            case "NEXT_PAGE" -> {
-                java.util.Locale locale = gui.resolveLocale();
-                List<CEBridge.RecipeData> recipes = gui.getSortedRecipesAdmin(categoryId,
-                        gui.getSearchQuery(player.getUniqueId()), locale, player.getUniqueId());
-                int pageSize = MenuConfig.itemSlots(menu.shape()).size();
-                int totalPages = Math.max(1, (recipes.size() + pageSize - 1) / pageSize);
-                if (page < totalPages - 1) gui.openAdminRecipeList(player, categoryId, page + 1);
-            }
-            case "SEARCH" -> handleAdminSearchClick(player, categoryId, event);
-            case "BACK_TO_MAIN" -> gui.openAdminMainMenu(player);
-            case "CLOSE" -> player.closeInventory();
-        }
-    }
-
-    private void handleAdminSearchClick(Player player, String categoryId, InventoryClickEvent event) {
-        ClickType click = event.getClick();
-        if (click == ClickType.SHIFT_LEFT) {
-            gui.clearAdminSearch(player);
-            plugin.getChatSearchListener().cancelSearch(player);
-        } else if (click == ClickType.RIGHT) {
-            gui.toggleSearchMode(player);
-            String category = gui.getPlayerCategory(player.getUniqueId());
-            int page = gui.getPlayerPage(player.getUniqueId());
-            gui.openAdminRecipeList(player, category, page);
-        } else {
-            String mode = gui.getSearchMode(player.getUniqueId());
-            plugin.getChatSearchListener().expectSearch(player, categoryId, mode);
-        }
-    }
-
-    // ========== 新增配方 GUI ==========
-
-    private MenuDef getCreatorMenu(Player player) {
-        String cType = gui.creatorType.getOrDefault(player.getUniqueId(), "shaped");
-        return switch (cType) {
-            case "furnace" -> plugin.getMenuConfig().getRecipeCreatorFurnace();
-            case "smoking" -> plugin.getMenuConfig().getRecipeCreatorSmoking();
-            case "campfire" -> plugin.getMenuConfig().getRecipeCreatorCampfire();
-            case "brewing" -> plugin.getMenuConfig().getRecipeCreatorBrewing();
-            case "stonecutting" -> plugin.getMenuConfig().getRecipeCreatorStonecutter();
-            case "smithing" -> plugin.getMenuConfig().getRecipeCreatorSmithing();
-            case "shapeless" -> plugin.getMenuConfig().getRecipeCreatorShapeless();
-            default -> plugin.getMenuConfig().getRecipeCreatorShaped();
-        };
-    }
-
-    private void handleCreatorAction(Player player, InventoryClickEvent event, ButtonDef btn) {
-        if (btn == null || (btn.action().isEmpty() && btn.triggers().isEmpty())) return;
-        playButtonSound(player, btn);
-        runButtonTriggers(player, btn, event.getClick());
-        switch (btn.action()) {
-            case "RUN_COMMAND" -> runButtonCommand(player, btn);
-            case "CREATOR_SHAPED" -> gui.openRecipeCreator(player, "shaped");
-            case "CREATOR_SHAPELESS" -> gui.openRecipeCreator(player, "shapeless");
-            case "CREATOR_FURNACE" -> gui.openRecipeCreator(player, "furnace");
-            case "CREATOR_SMITHING" -> gui.openRecipeCreator(player, "smithing");
-            case "CREATOR_STONECUTTER" -> gui.openRecipeCreator(player, "stonecutting");
-            case "CREATOR_CAMPFIRE" -> gui.openRecipeCreator(player, "campfire");
-            case "CREATOR_SMOKING" -> gui.openRecipeCreator(player, "smoking");
-            case "CREATOR_BREWING" -> gui.openRecipeCreator(player, "brewing");
-            case "CREATOR_BLAST_TIME" -> gui.adjustCreatorValue(player, "G", event.getClick().isLeftClick());
-            case "CREATOR_FURNACE_TIME" -> gui.adjustCreatorValue(player, "P", event.getClick().isLeftClick());
-            case "CREATOR_FURNACE_MODE" -> gui.toggleFurnaceMode(player, event.getClick());
-            case "CREATOR_SMOKING_TIME" -> gui.adjustCreatorValue(player, "Y", event.getClick().isLeftClick());
-            case "CREATOR_CAMPFIRE_TIME" -> gui.adjustCreatorValue(player, "G", event.getClick().isLeftClick());
-            case "CREATOR_EXP" -> {
-                if (event.getClick() == org.bukkit.event.inventory.ClickType.SHIFT_LEFT) {
-                    gui.expectExpInput(player);
-                } else {
-                    gui.adjustCreatorValue(player, "E", event.getClick().isLeftClick());
-                }
-            }
-            case "SAVE_RECIPE" -> {
-                gui.saveCreatorRecipe(player);
-                returnCreatorItems(player, gui.getOpenInventory(player.getUniqueId()));
-                String cat = gui.getPlayerCategory(player.getUniqueId());
-                int page = gui.getPlayerPage(player.getUniqueId());
-                gui.removePlayer(player.getUniqueId());
-                if (cat != null) gui.openRecipeList(player, cat, page);
-                else player.closeInventory();
-            }
-            case "BACK" -> gui.openRecipeList(player,
-                    gui.getPlayerCategory(player.getUniqueId()), gui.getPlayerPage(player.getUniqueId()));
-        }
+    /** 读取被点物品 PDC 动作并经统一点击链执行；物品无动作返回 false */
+    private boolean routeButton(Player player, InventoryClickEvent event, String guiType) {
+        return clickService.handleButton(player, event.getCurrentItem(), event.getClick(),
+                guiType, event.getRawSlot(), event.getSlot());
     }
 
     // ========== 辅助 ==========
-
-    private boolean isCreatorInputSlot(MenuDef menu, int rawSlot) {
-        if (menu == null || rawSlot < 0) return false;
-        ButtonDef btn = MenuConfig.buttonAt(menu, rawSlot);
-        return btn != null && btn.dynamic();
-    }
 
     private boolean shouldBlockBottomTransfer(InventoryClickEvent event) {
         return event.isShiftClick()
                 || event.getClick() == ClickType.DOUBLE_CLICK
                 || event.getAction() == InventoryAction.MOVE_TO_OTHER_INVENTORY
                 || event.getAction() == InventoryAction.COLLECT_TO_CURSOR;
-    }
-
-    private void returnCreatorItems(Player player, Inventory inv) {
-        if (inv == null) return;
-        MenuDef menu = getCreatorMenu(player);
-        if (menu == null) return;
-
-        for (int slot = 0; slot < inv.getSize(); slot++) {
-            if (!isCreatorInputSlot(menu, slot)) continue;
-            ItemStack item = inv.getItem(slot);
-            if (item == null || item.getType().isAir()) continue;
-            if (gui.isGUIItem(item)) {
-                inv.setItem(slot, null);
-                continue;
-            }
-
-            inv.setItem(slot, null);
-            Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
-            for (ItemStack leftover : leftovers.values()) {
-                player.getWorld().dropItemNaturally(player.getLocation(), leftover);
-            }
-        }
     }
 
     private void scheduleGUIItemCleanup(Player player) {
@@ -729,25 +274,5 @@ public class GUIListener implements Listener {
             gui.removeLeakedGUIItems(player);
             if (resyncInventory) player.updateInventory();
         }, 1L);
-    }
-
-    // ========== 调试 ==========
-
-    private void debugRecipeClick(Player player, CEBridge.RecipeData recipe) {
-        java.util.Locale locale = gui.resolveLocale();
-        String resultId = recipe.resultId;
-        String name = gui.toChineseName(resultId, locale);
-        player.sendMessage("§e[调试] §7物品ID: §f" + resultId);
-        player.sendMessage("§e[调试] §7显示名: §f" + name);
-        player.sendMessage("§e[调试] §7搜索以下关键词可找到此物品:");
-        // 显示名前2字、前1字、全名作为搜索建议
-        if (name.length() >= 2) player.sendMessage("§e[调试]   §a" + name.substring(0, 2) + " §7→ 前2字");
-        if (name.length() >= 1) player.sendMessage("§e[调试]   §a" + name.substring(0, 1) + " §7→ 首字");
-        player.sendMessage("§e[调试]   §a" + name + " §7→ 全名");
-        // 原料也显示
-        for (String ing : recipe.ingredientIds) {
-            player.sendMessage("§e[调试] §7原料: §f" + ing + " §7→ §f" + gui.toChineseName(ing, locale));
-        }
-        plugin.getLogger().info("[调试] 点击配方: " + recipe.id + " resultId=" + resultId + " name=" + name);
     }
 }

@@ -7,6 +7,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import com.linong.recipelookup.gui.MenuTriggerResolver;
 
 import java.io.File;
 import java.util.*;
@@ -54,21 +55,26 @@ public class MenuConfig {
 
     // ==================== 加载 ====================
 
+    /** 菜单配置版本：v2 = triggers 动作体系（1.1.0） */
+    private static final int CONFIG_VERSION = 2;
+
     public void load() {
         this.config = plugin.getConfigManager();
+        migrateMenuFile("menu.yml");
+        migrateMenuFile("recipesmenu.yml");
+
         file = new File(plugin.getDataFolder(), "menu.yml");
-        if (!file.exists()) plugin.saveResource("menu.yml", false);
-        config.mergeYamlDefaults(file, "menu.yml");
         yaml = YamlConfiguration.loadConfiguration(file);
 
         // 同时加载 recipesmenu.yml（新增配方 GUI）
         File creatorFile = new File(plugin.getDataFolder(), "recipesmenu.yml");
-        if (!creatorFile.exists()) plugin.saveResource("recipesmenu.yml", false);
-        config.mergeYamlDefaults(creatorFile, "recipesmenu.yml");
         org.bukkit.configuration.file.YamlConfiguration creatorYaml =
                 org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(creatorFile);
-        // 合并到主 yaml
-        for (String key : creatorYaml.getKeys(false)) yaml.set(key, creatorYaml.get(key));
+        // 合并到主 yaml（config_version 跳过，两文件各自维护）
+        for (String key : creatorYaml.getKeys(false)) {
+            if ("config_version".equals(key)) continue;
+            yaml.set(key, creatorYaml.get(key));
+        }
 
         mainMenu = parseMenu("main_menu");
         recipeList = parseMenu("recipe_list");
@@ -89,6 +95,52 @@ public class MenuConfig {
     }
 
     public void reload() { load(); }
+
+    /**
+     * 菜单配置升级（参照 ALFriends 的 config_version 机制）：
+     * <ul>
+     *   <li>磁盘无该文件 → 从 jar 释放（自带最新版本与注释）；</li>
+     *   <li>版本低于当前 → 备份为 {@code *.bak}，然后只补缺失的键（连同注释），
+     *       用户自定义过的键一律保留原样，旧版 {@code action:} 写法由兼容层继续识别；</li>
+     *   <li>版本已达当前 → 什么都不做。</li>
+     * </ul>
+     */
+    private void migrateMenuFile(String name) {
+        File diskFile = new File(plugin.getDataFolder(), name);
+        if (!diskFile.exists()) {
+            plugin.saveResource(name, false);
+            return;
+        }
+
+        YamlConfiguration disk = YamlConfiguration.loadConfiguration(diskFile);
+        int version = disk.getInt("config_version", 1);
+        if (version >= CONFIG_VERSION) return;
+
+        // 旧版本先备份，升级出问题可随时用 .bak 回滚
+        File backup = new File(plugin.getDataFolder(), name + ".bak");
+        try {
+            java.nio.file.Files.copy(diskFile.toPath(), backup.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception e) {
+            plugin.getLogger().warning("备份 " + name + " 失败: " + e.getMessage());
+        }
+
+        // 只补缺失键（含注释），不动用户已有键
+        config.mergeYamlDefaults(diskFile, name);
+
+        // 确保版本号已写入（merge 已带出 jar 里的 config_version，这里兜底）
+        try {
+            disk = YamlConfiguration.loadConfiguration(diskFile);
+            if (disk.getInt("config_version", 0) < CONFIG_VERSION) {
+                disk.set("config_version", CONFIG_VERSION);
+                disk.save(diskFile);
+            }
+            plugin.getLogger().info("  [OK] " + name + " 已升级到 v" + CONFIG_VERSION
+                    + "（旧文件备份为 " + name + ".bak，自定义修改已保留）");
+        } catch (Exception e) {
+            plugin.getLogger().warning("写入 " + name + " 版本号失败: " + e.getMessage());
+        }
+    }
 
     // ==================== 解析 ====================
 
@@ -175,8 +227,22 @@ public class MenuConfig {
             }
         }
 
-        return new ButtonDef(mat, name, lore, action, category, dynamic, ceItem, sound, command,
-                asPlayer, Map.copyOf(triggers));
+        return withEncodedTriggers(new ButtonDef(mat, name, lore, action, category, dynamic,
+                ceItem, sound, command, asPlayer, Map.copyOf(triggers)));
+    }
+
+    /** 加载时预计算四种点击类型的动作编码串，写按钮物品 PDC 用（点击路径零配置查询） */
+    private static ButtonDef withEncodedTriggers(ButtonDef def) {
+        Map<String, String> encoded = new LinkedHashMap<>();
+        for (String click : new String[]{
+                MenuTriggerResolver.CLICK_LEFT, MenuTriggerResolver.CLICK_RIGHT,
+                MenuTriggerResolver.CLICK_SHIFT_LEFT, MenuTriggerResolver.CLICK_SHIFT_RIGHT}) {
+            String resolved = MenuTriggerResolver.resolve(def, click);
+            if (resolved != null && !resolved.isBlank()) encoded.put(click, resolved);
+        }
+        return new ButtonDef(def.material(), def.name(), def.lore(), def.action(), def.category(),
+                def.dynamic(), def.ceItem(), def.sound(), def.command(), def.asPlayer(),
+                def.triggers(), Map.copyOf(encoded));
     }
 
     // ==================== 槽位计算 ====================
@@ -329,22 +395,33 @@ public class MenuConfig {
     public record ButtonDef(Material material, String name, List<String> lore,
                             String action, String category, boolean dynamic,
                             String ceItem, String sound, String command, boolean asPlayer,
-                            Map<String, List<String>> triggers) {
+                            Map<String, List<String>> triggers,
+                            Map<String, String> encodedTriggers) {
         /** CE 物品 ID（如 internal:cooking_info），null 表示使用标准 Material */
         public String ceItem() { return ceItem; }
         /** 按钮点击声音（原版 Sound 键名或 CE 自定义声音 ID），默认 "block.note_block.pling" */
         public String sound() { return sound; }
-        /** 自定义命令（action=RUN_COMMAND 时执行），"" 表示无 */
+        /** 自定义命令（旧 action=RUN_COMMAND 兼容用），"" 表示无 */
         public String command() { return command; }
         /** 命令以谁的身份执行：true=玩家，false=控制台 */
         public boolean asPlayer() { return asPlayer; }
         public Map<String, List<String>> triggers() { return triggers; }
+        /** 加载时按 MenuTriggerResolver 预计算的各点击类型动作编码串（click → encoded），点击路径零配置查询 */
+        public Map<String, String> encodedTriggers() { return encodedTriggers; }
+
+        public ButtonDef(Material material, String name, List<String> lore,
+                         String action, String category, boolean dynamic,
+                         String ceItem, String sound, String command, boolean asPlayer,
+                         Map<String, List<String>> triggers) {
+            this(material, name, lore, action, category, dynamic, ceItem, sound, command,
+                    asPlayer, triggers, Map.of());
+        }
 
         public ButtonDef(Material material, String name, List<String> lore,
                          String action, String category, boolean dynamic,
                          String ceItem, String sound, String command, boolean asPlayer) {
             this(material, name, lore, action, category, dynamic, ceItem, sound, command,
-                    asPlayer, Map.of());
+                    asPlayer, Map.of(), Map.of());
         }
 
         /** 便利构造器（无 sound/command） */

@@ -1,10 +1,25 @@
 # ============================================================
 # AL-RecipeViewer 新增配方菜单配置
+#
+# 配置版本 config_version: 2 —— 插件启动时自动升级旧版本配置：
+#   只补缺失的新键（连同注释），自定义过的键一律保留原样，旧文件备份为 recipesmenu.yml.bak
+#
 # 文字使用 {@key} 引用 lang 文件中的 menu 节点
 #
-# 按钮配置项同 menu.yml，额外支持:
-#   sound: 点击音效（原版 Sound 或 CE 自定义声音 ID，默认 block.note_block.pling）
+# 按钮配置项与 triggers 动作写法同 menu.yml（见其头部说明）。
+# 本文件创建器用到的业务动作:
+#   open_creator: 类型        - 打开指定类型创建器（shaped/shapeless/furnace/smithing/
+#                               stonecutting/campfire/smoking/brewing）
+#   creator_adjust: 槽位      - 调整数值，左键 + / 右键 -（P=烧炼时间, G=高炉/营火时间,
+#                               Y=烟熏时间, E=经验）
+#   creator_mode              - 切换烧炼模式（左键=高炉 / 右键=熔炉 / Shift+左键=两者）
+#   creator_exp_input         - 聊天栏手动输入经验值
+#   save_recipe               - 保存当前配方
+#   back                      - 返回配方列表
 # ============================================================
+
+# 配置版本（插件自动维护，请勿手动调小）
+config_version: 2
 
 # ===== 配方创建器 — 类型选择 =====
 recipe_creator_type:
@@ -22,61 +37,79 @@ recipe_creator_type:
       name: "{@creator_shaped}"
       lore:
         - "{@creator_shaped_desc}"
-      action: "CREATOR_SHAPED"
+      triggers:
+        left:
+          - "open_creator: shaped"
     # 无序合成
     C:
       material: "CRAFTING_TABLE"
       name: "{@creator_shapeless}"
       lore:
         - "{@creator_shapeless_desc}"
-      action: "CREATOR_SHAPELESS"
+      triggers:
+        left:
+          - "open_creator: shapeless"
     # 熔炉 / 高炉
     F:
       material: "FURNACE"
       name: "{@creator_furnace}"
       lore:
         - "{@creator_furnace_desc}"
-      action: "CREATOR_FURNACE"
+      triggers:
+        left:
+          - "open_creator: furnace"
     # 锻造台
     S:
       material: "SMITHING_TABLE"
       name: "{@creator_smithing}"
       lore:
         - "{@creator_smithing_desc}"
-      action: "CREATOR_SMITHING"
+      triggers:
+        left:
+          - "open_creator: smithing"
     # 切石机
     T:
       material: "STONECUTTER"
       name: "{@creator_stonecutter}"
       lore:
         - "{@creator_stonecutter_desc}"
-      action: "CREATOR_STONECUTTER"
+      triggers:
+        left:
+          - "open_creator: stonecutting"
     # 酿造台
     N:
       material: "BREWING_STAND"
       name: "{@creator_brewing}"
       lore:
         - "{@creator_brewing_desc}"
-      action: "CREATOR_BREWING"
+      triggers:
+        left:
+          - "open_creator: brewing"
     # 营火
     L:
       material: "CAMPFIRE"
       name: "{@creator_campfire}"
       lore:
         - "{@creator_campfire_desc}"
-      action: "CREATOR_CAMPFIRE"
+      triggers:
+        left:
+          - "open_creator: campfire"
     # 烟熏炉
     Y:
       material: "SMOKER"
       name: "{@creator_smoking}"
       lore:
         - "{@creator_smoking_desc}"
-      action: "CREATOR_SMOKING"
+      triggers:
+        left:
+          - "open_creator: smoking"
     # 返回
     B:
       material: "OAK_DOOR"
       name: "{@creator_back}"
-      action: "BACK"
+      triggers:
+        left:
+          - "back"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -104,7 +137,9 @@ recipe_creator_shaped:
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -132,7 +167,9 @@ recipe_creator_shapeless:
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -164,7 +201,13 @@ recipe_creator_furnace:
         - "{@furnace_mode_left}"
         - "{@furnace_mode_right}"
         - "{@furnace_mode_shift}"
-      action: "CREATOR_FURNACE_MODE"
+      triggers:
+        left:
+          - "creator_mode"
+        right:
+          - "creator_mode"
+        shift_left:
+          - "creator_mode"
     # 烧炼时间 — 左键 +1 / 右键 -1（ticks，20 ticks = 1 秒）
     P:
       material: "CLOCK"
@@ -173,7 +216,11 @@ recipe_creator_furnace:
         - "{@furnace_time_lore}"
         - "{@furnace_time_mode}"
         - "{@furnace_time_hint}"
-      action: "CREATOR_FURNACE_TIME"
+      triggers:
+        left:
+          - "creator_adjust: P"
+        right:
+          - "creator_adjust: P"
     # 经验值 — 左键 +0.1 / 右键 -0.1 / Shift+左键 手动输入
     E:
       material: "EXPERIENCE_BOTTLE"
@@ -181,12 +228,20 @@ recipe_creator_furnace:
       lore:
         - "{@furnace_exp_lore}"
         - "{@furnace_exp_shift}"
-      action: "CREATOR_EXP"
+      triggers:
+        left:
+          - "creator_adjust: E"
+        right:
+          - "creator_adjust: E"
+        shift_left:
+          - "creator_exp_input"
     # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -216,7 +271,11 @@ recipe_creator_smoking:
       name: "{@smoking_time}"
       lore:
         - "{@smoking_time_lore}"
-      action: "CREATOR_SMOKING_TIME"
+      triggers:
+        left:
+          - "creator_adjust: Y"
+        right:
+          - "creator_adjust: Y"
     # 经验值 — 左键 +0.1 / 右键 -0.1 / Shift+左键 手动输入
     E:
       material: "EXPERIENCE_BOTTLE"
@@ -224,12 +283,20 @@ recipe_creator_smoking:
       lore:
         - "{@furnace_exp_lore}"
         - "{@furnace_exp_shift}"
-      action: "CREATOR_EXP"
+      triggers:
+        left:
+          - "creator_adjust: E"
+        right:
+          - "creator_adjust: E"
+        shift_left:
+          - "creator_exp_input"
     # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -260,12 +327,18 @@ recipe_creator_campfire:
       lore:
         - "{@campfire_time_lore}"
         - "{@campfire_time_default}"
-      action: "CREATOR_CAMPFIRE_TIME"
+      triggers:
+        left:
+          - "creator_adjust: G"
+        right:
+          - "creator_adjust: G"
     # 保存配方
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -290,7 +363,9 @@ recipe_creator_stonecutter:
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -315,7 +390,9 @@ recipe_creator_smithing:
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"
@@ -340,7 +417,9 @@ recipe_creator_brewing:
     B:
       material: "OAK_DOOR"
       name: "{@creator_save}"
-      action: "SAVE_RECIPE"
+      triggers:
+        left:
+          - "save_recipe"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"

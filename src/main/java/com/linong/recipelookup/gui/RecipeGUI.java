@@ -42,6 +42,11 @@ public class RecipeGUI {
     private final ConfigManager config;
     private final MenuConfig menuConfig;
     private final NamespacedKey guiItemKey;
+    private final NamespacedKey actionKey;
+    private final NamespacedKey rightActionKey;
+    private final NamespacedKey shiftLeftActionKey;
+    private final NamespacedKey shiftRightActionKey;
+    private final NamespacedKey buttonSoundKey;
 
     private final Map<UUID, String> guiType = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerCategory = new ConcurrentHashMap<>();
@@ -67,6 +72,11 @@ public class RecipeGUI {
         this.config = plugin.getConfigManager();
         this.menuConfig = plugin.getMenuConfig();
         this.guiItemKey = new NamespacedKey(plugin, "gui_display_item");
+        this.actionKey = new NamespacedKey(plugin, "gui_action");
+        this.rightActionKey = new NamespacedKey(plugin, "gui_right_action");
+        this.shiftLeftActionKey = new NamespacedKey(plugin, "gui_shift_left_action");
+        this.shiftRightActionKey = new NamespacedKey(plugin, "gui_shift_right_action");
+        this.buttonSoundKey = new NamespacedKey(plugin, "gui_button_sound");
     }
 
     private Inventory createGUIInventory(UUID owner, String type, int size, String title) {
@@ -108,8 +118,8 @@ public class RecipeGUI {
                 if (c == '#') {
                     inv.setItem(slot, buildButtonOrCE(btn, null));
                 } else {
-                    int count = plugin.getLoadedRecipes()
-                            .getOrDefault(btn.category(), List.of()).size();
+                    // 普通主菜单只统计未隐藏的配方，与玩家实际能浏览到的数量一致
+                    int count = visibleRecipeCount(btn.category());
                     Map<String, String> v = MenuConfig.vars("count", String.valueOf(count));
                     inv.setItem(slot, buildButtonOrCE(btn, v));
                 }
@@ -170,6 +180,15 @@ public class RecipeGUI {
         else playerMenuDef.remove(uuid);
         openInventories.put(uuid, inv);
         player.openInventory(inv);
+    }
+
+    /** 统计分类中未隐藏的配方数（普通主菜单显示用，与玩家实际可浏览数量一致） */
+    private int visibleRecipeCount(String categoryId) {
+        int count = 0;
+        for (CEBridge.RecipeData r : plugin.getLoadedRecipes().getOrDefault(categoryId, List.of())) {
+            if (!plugin.getVisibilityManager().isHidden(r.resultId)) count++;
+        }
+        return count;
     }
 
     private ItemStack buildAdminCategoryButton(ButtonDef btn, Map<String, String> vars) {
@@ -735,7 +754,7 @@ public class RecipeGUI {
             meta.setLore(lore);
             item.setItemMeta(meta);
         }
-        return markGUIItem(item);
+        return applyMenuActions(item, btn);
     }
 
     public void toggleFurnaceMode(Player player, org.bukkit.event.inventory.ClickType click) {
@@ -1054,6 +1073,50 @@ public class RecipeGUI {
     }
 
     public CEBridge getBridge() { return bridge; }
+
+    /** 按玩家当前创建器类型取对应菜单定义 */
+    public MenuDef getCreatorMenuFor(UUID uuid) {
+        String cType = creatorType.getOrDefault(uuid, "shaped");
+        return switch (cType) {
+            case "furnace" -> menuConfig.getRecipeCreatorFurnace();
+            case "smoking" -> menuConfig.getRecipeCreatorSmoking();
+            case "campfire" -> menuConfig.getRecipeCreatorCampfire();
+            case "brewing" -> menuConfig.getRecipeCreatorBrewing();
+            case "stonecutting" -> menuConfig.getRecipeCreatorStonecutter();
+            case "smithing" -> menuConfig.getRecipeCreatorSmithing();
+            case "shapeless" -> menuConfig.getRecipeCreatorShapeless();
+            default -> menuConfig.getRecipeCreatorShaped();
+        };
+    }
+
+    private boolean isCreatorInputSlot(MenuDef menu, int rawSlot) {
+        if (menu == null || rawSlot < 0) return false;
+        ButtonDef btn = MenuConfig.buttonAt(menu, rawSlot);
+        return btn != null && btn.dynamic();
+    }
+
+    /** 关闭/保存创建器时，把动态输入槽里的玩家物品归还背包（GUI 物品直接清除） */
+    public void returnCreatorItems(Player player, Inventory inv) {
+        if (inv == null) return;
+        MenuDef menu = getCreatorMenuFor(player.getUniqueId());
+        if (menu == null) return;
+
+        for (int slot = 0; slot < inv.getSize(); slot++) {
+            if (!isCreatorInputSlot(menu, slot)) continue;
+            ItemStack item = inv.getItem(slot);
+            if (item == null || item.getType().isAir()) continue;
+            if (isGUIItem(item)) {
+                inv.setItem(slot, null);
+                continue;
+            }
+
+            inv.setItem(slot, null);
+            Map<Integer, ItemStack> leftovers = player.getInventory().addItem(item);
+            for (ItemStack leftover : leftovers.values()) {
+                player.getWorld().dropItemNaturally(player.getLocation(), leftover);
+            }
+        }
+    }
 
     public void openRecipeCreator(Player player) {
         openRecipeCreator(player, "crafting");
@@ -1427,10 +1490,51 @@ public class RecipeGUI {
                     meta.setLore(lore);
                     item.setItemMeta(meta);
                 }
-                return markGUIItem(item);
+                return applyMenuActions(item, btn);
             }
         }
-        return markGUIItem(menuConfig.buildButton(btn, vars));
+        return applyMenuActions(menuConfig.buildButton(btn, vars), btn);
+    }
+
+    /** 把按钮四种点击的动作编码串与音效写进物品 PDC（点击路径零配置查询，参照 ALFriends） */
+    private ItemStack applyMenuActions(ItemStack item, ButtonDef btn) {
+        if (item == null || item.getType().isAir() || btn == null) return item;
+        Map<String, String> encoded = btn.encodedTriggers();
+        if (encoded.isEmpty()) return item;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+        org.bukkit.persistence.PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        for (Map.Entry<String, String> e : encoded.entrySet()) {
+            pdc.set(actionKeyFor(e.getKey()), PersistentDataType.STRING, e.getValue());
+        }
+        if (btn.sound() != null && !btn.sound().isEmpty()) {
+            pdc.set(buttonSoundKey, PersistentDataType.STRING, btn.sound());
+        }
+        item.setItemMeta(meta);
+        return item;
+    }
+
+    private NamespacedKey actionKeyFor(String click) {
+        return switch (click) {
+            case MenuTriggerResolver.CLICK_RIGHT -> rightActionKey;
+            case MenuTriggerResolver.CLICK_SHIFT_LEFT -> shiftLeftActionKey;
+            case MenuTriggerResolver.CLICK_SHIFT_RIGHT -> shiftRightActionKey;
+            default -> actionKey;
+        };
+    }
+
+    /** 读取物品在指定点击类型下的动作编码串；无动作返回 null */
+    public String readTriggerActions(ItemStack item, org.bukkit.event.inventory.ClickType click) {
+        if (item == null || !item.hasItemMeta()) return null;
+        return item.getItemMeta().getPersistentDataContainer()
+                .get(actionKeyFor(MenuTriggerResolver.clickName(click)), PersistentDataType.STRING);
+    }
+
+    /** 读取按钮物品自带的点击音效（无则返回 null，由调用方播默认音） */
+    public String readButtonSound(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return null;
+        return item.getItemMeta().getPersistentDataContainer()
+                .get(buttonSoundKey, PersistentDataType.STRING);
     }
 
     private ItemStack markGUIItem(ItemStack item) {
