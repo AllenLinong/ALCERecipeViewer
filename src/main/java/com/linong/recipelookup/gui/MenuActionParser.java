@@ -10,12 +10,18 @@ import java.util.Locale;
  * <p>
  * 动作串用不可见分隔符 {@link #ACTION_SEPARATOR} 拼接，{@code delay:/wait:}
  * 条目累计后续动作的延迟 tick 数（多条累加、溢出钳制），其余条目按顺序执行。
+ * 关闭类动作（close/silent-close/force-close）自带隐式 1 tick 延迟：
+ * 关闭菜单后，后续动作至少隔 1 tick 再执行（关菜单再开菜单的安全间隔），
+ * 显式 {@code delay:} 在此基础上继续累加。
  * 纯逻辑、无 Bukkit 依赖。
  */
 final class MenuActionParser {
 
     /** Record Separator，避免与动作内容里的 ":"、";"、空格冲突 */
     static final String ACTION_SEPARATOR = "\u001E";
+
+    /** 关闭动作自带的隐式延迟（tick）：关闭后再执行后续动作的安全间隔 */
+    static final long CLOSE_FOLLOWUP_DELAY_TICKS = 1L;
 
     private MenuActionParser() {
     }
@@ -32,6 +38,9 @@ final class MenuActionParser {
                 delayTicks = addWithoutOverflow(delayTicks, parseDelayTicks(delayValue));
             } else {
                 plannedActions.add(new PlannedAction(action, delayTicks));
+                if (isCloseAction(action)) {
+                    delayTicks = addWithoutOverflow(delayTicks, CLOSE_FOLLOWUP_DELAY_TICKS);
+                }
             }
         }
         return List.copyOf(plannedActions);
@@ -75,6 +84,14 @@ final class MenuActionParser {
         if (separator < 0) return null;
         String type = action.substring(0, separator).trim().toLowerCase(Locale.ROOT);
         return type.equals("delay") || type.equals("wait") ? action.substring(separator + 1).trim() : null;
+    }
+
+    /** 关闭类动作（close/silent-close/force-close，容忍 "action:" 前缀与大小写） */
+    private static boolean isCloseAction(String action) {
+        String normalized = action.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("action:")) normalized = normalized.substring(7).trim();
+        return normalized.equals("close") || normalized.equals("silent-close")
+                || normalized.equals("force-close");
     }
 
     private static long positiveCeil(double value) {

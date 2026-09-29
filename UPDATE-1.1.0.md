@@ -32,6 +32,7 @@
   ```
 
 - 通用动作：`close`、`sound: 名-音量-音调`、`command:`/`op:`/`console:`、`message:`、`open: main|admin_main|creator_type`、`delay:`/`wait:`（支持 `20`、`20t`、`1s`、`500ms`，多条累加）。
+- `close`（含 silent-close/force-close）自带隐式 1 tick 延迟：关闭菜单后，后续动作至少隔 1 tick 再执行（关菜单再开菜单的安全间隔）；显式 `delay:` 在此基础上累加（`close` + `delay: 5` = 后续动作 6 tick 后执行）。该语义由单测 `MenuActionParserTest` 锁定。
 - 业务动作改为小写下划线风格：`open_category: <分类>`、`prev_page`、`next_page`、`search` / `search_mode` / `search_clear`、`back`、`back_to_main`、`create_recipe`、`prev_recipe` / `next_recipe`、`open_creator: <类型>`、`creator_adjust: P|G|Y|E`、`creator_mode`、`creator_exp_input`、`save_recipe`。
 - **旧版单值 `action: OPEN_CATEGORY` 等仍然兼容**（自动映射为新动作）；同时配置 `action` 与 `triggers` 时以 `triggers` 为准。
 - 命令类动作沿用分号串多条 + 可省略开头 `/`；占位符 `{player}`/`%player_name%`、`{uuid}`/`%player_uuid%`、`{world}`/`%world%` 不变。
