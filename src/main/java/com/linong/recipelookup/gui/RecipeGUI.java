@@ -182,13 +182,15 @@ public class RecipeGUI {
         player.openInventory(inv);
     }
 
-    /** 统计分类中未隐藏的配方数（普通主菜单显示用，与玩家实际可浏览数量一致） */
+    /** 统计玩家实际能看到的配方条目数（普通主菜单显示用）：
+     *  过滤已隐藏 + 按结果物品去重（同一物品多种合成方式只算一条），与列表页条目严格一致 */
     private int visibleRecipeCount(String categoryId) {
-        int count = 0;
+        Set<String> seenResults = new HashSet<>();
         for (CEBridge.RecipeData r : plugin.getLoadedRecipes().getOrDefault(categoryId, List.of())) {
-            if (!plugin.getVisibilityManager().isHidden(r.resultId)) count++;
+            if (plugin.getVisibilityManager().isHidden(r.resultId)) continue;
+            seenResults.add(r.resultId);
         }
-        return count;
+        return seenResults.size();
     }
 
     private ItemStack buildAdminCategoryButton(ButtonDef btn, Map<String, String> vars) {
