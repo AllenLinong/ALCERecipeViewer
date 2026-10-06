@@ -349,22 +349,25 @@ final class MenuActionRouter {
 
         int recipeIdx = page * itemSlots.size() + itemIndex;
         if (recipeIdx >= recipes.size()) return;
+        CEBridge.RecipeData recipe = recipes.get(recipeIdx);
 
-        // 排序菜单：左键上移 / 右键下移，其他点击忽略
+        // 排序菜单：左键上移 / 右键下移，Shift+左/右键进入聊天输入一次移动多格
         if (RecipeGUI.TYPE_ADMIN_ORDER.equals(ctx.guiType())) {
-            if (ctx.click().isLeftClick()) {
+            if (ctx.click().isShiftClick() && ctx.click().isLeftClick()) {
+                gui.expectOrderMoveInput(player, categoryId, recipe.resultId, -1, page);
+            } else if (ctx.click().isShiftClick() && ctx.click().isRightClick()) {
+                gui.expectOrderMoveInput(player, categoryId, recipe.resultId, 1, page);
+            } else if (ctx.click().isLeftClick()) {
                 gui.moveVisibleRecipe(categoryId, recipes, recipeIdx, -1);
+                gui.openOrderRecipeList(player, categoryId, page);
             } else if (ctx.click().isRightClick()) {
                 gui.moveVisibleRecipe(categoryId, recipes, recipeIdx, 1);
-            } else {
-                return;
+                gui.openOrderRecipeList(player, categoryId, page);
             }
-            gui.openOrderRecipeList(player, categoryId, page);
             return;
         }
 
         if (ctx.click().isRightClick()) return;
-        CEBridge.RecipeData recipe = recipes.get(recipeIdx);
 
         if (admin) {
             gui.toggleRecipeVisibility(player, recipe);

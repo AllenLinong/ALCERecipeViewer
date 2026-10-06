@@ -61,6 +61,12 @@ public class ChatSearchListener implements Listener {
             return;
         }
 
+        // 排序菜单移动格数输入
+        if (plugin.getRecipeGUI().handleOrderMoveInput(player, msg)) {
+            event.setCancelled(true);
+            return;
+        }
+
         // 搜索输入
         UUID uuid = player.getUniqueId();
         String categoryId = waitingSearch.remove(uuid);

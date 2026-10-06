@@ -425,6 +425,80 @@ public class RecipeGUI {
         plugin.getRecipeOrderManager().moveVisible(categoryId, ids, index, direction);
     }
 
+    /** 待输入的排序移动：direction -1 = 前进（上移），+1 = 后退（下移） */
+    public record PendingOrderMove(String categoryId, String resultId, int direction, int page) {}
+
+    private final Map<UUID, PendingOrderMove> pendingOrderMoves = new ConcurrentHashMap<>();
+
+    /** Shift+点击条目后进入聊天输入模式：输入 N 格一次性移动 */
+    public void expectOrderMoveInput(Player player, String categoryId, String resultId, int direction, int page) {
+        UUID uuid = player.getUniqueId();
+        pendingOrderMoves.put(uuid, new PendingOrderMove(categoryId, resultId, direction, page));
+        player.closeInventory();
+        player.sendMessage(config.getOrderMovePrompt(direction));
+    }
+
+    /** 聊天输入处理（由 ChatSearchListener 在异步线程调用）：无待处理输入返回 false */
+    public boolean handleOrderMoveInput(Player player, String input) {
+        UUID uuid = player.getUniqueId();
+        PendingOrderMove pending = pendingOrderMoves.remove(uuid);
+        if (pending == null) return false;
+
+        if (input.equalsIgnoreCase("cancel")) {
+            plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
+                player.sendMessage(config.getOrderMoveCancelled());
+                openOrderRecipeList(player, pending.categoryId(), pending.page());
+            });
+            return true;
+        }
+
+        int steps;
+        try {
+            steps = Integer.parseInt(input.trim());
+        } catch (NumberFormatException e) {
+            steps = 0;
+        }
+        if (steps == 0 || Math.abs(steps) > 999) {
+            plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> {
+                player.sendMessage(config.getOrderMoveInvalid());
+                openOrderRecipeList(player, pending.categoryId(), pending.page());
+            });
+            return true;
+        }
+
+        final int move = pending.direction() * steps; // 输入负数可反向
+        plugin.getFoliaLib().getScheduler().runAtEntity(player, t -> applyOrderMove(player, pending, move));
+        return true;
+    }
+
+    /** 应用移动并重开排序菜单（跳到物品落地的那一页） */
+    private void applyOrderMove(Player player, PendingOrderMove pending, int move) {
+        UUID uuid = player.getUniqueId();
+        List<CEBridge.RecipeData> recipes = getSortedRecipes(pending.categoryId(), null, resolveLocale(), uuid);
+        int from = -1;
+        for (int i = 0; i < recipes.size(); i++) {
+            if (pending.resultId().equals(recipes.get(i).resultId)) {
+                from = i;
+                break;
+            }
+        }
+        if (from < 0) { // 物品已不在可见列表（如被隐藏），直接回菜单
+            openOrderRecipeList(player, pending.categoryId(), pending.page());
+            return;
+        }
+        int to = Math.max(0, Math.min(recipes.size() - 1, from + move));
+        if (to != from) {
+            List<String> ids = new ArrayList<>();
+            for (CEBridge.RecipeData r : recipes) ids.add(r.resultId);
+            plugin.getRecipeOrderManager().moveTo(pending.categoryId(), ids, from, to);
+        }
+        int pageSize = 28;
+        MenuDef menu = menuConfig.getOrderList();
+        if (menu != null) pageSize = Math.max(1, MenuConfig.itemSlots(menu.shape()).size());
+        openOrderRecipeList(player, pending.categoryId(), to / pageSize);
+        player.sendMessage(config.getOrderMoveDone(toChineseName(pending.resultId(), resolveLocale()), to + 1));
+    }
+
     // ===================== 配方列表 =====================
 
     public void openRecipeList(Player player, String categoryId, int page) {
@@ -1864,6 +1938,8 @@ public class RecipeGUI {
         lore.add(config.getOrderPosition(position));
         lore.add(config.getOrderMoveUp());
         lore.add(config.getOrderMoveDown());
+        lore.add(config.getOrderMoveJumpUp());
+        lore.add(config.getOrderMoveJumpDown());
         lore.add("");
         lore.add(config.getOrderSavedHint());
         ItemMeta meta = item.getItemMeta();
@@ -2345,6 +2421,7 @@ public class RecipeGUI {
 
     public void discardPlayer(UUID uuid) {
         pendingExpInput.remove(uuid);
+        pendingOrderMoves.remove(uuid);
         savedCreatorType.remove(uuid);
         savedCreatorItems.remove(uuid);
         savedCreatorExpVal.remove(uuid);

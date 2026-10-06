@@ -294,6 +294,37 @@ public class ConfigManager {
         String v = getLangString("order.move_down");
         return v != null ? v : "§e▶ 右键: 下移一位";
     }
+    public String getOrderMoveJumpUp() {
+        String v = getLangString("order.move_jump_up");
+        return v != null ? v : "§e⇧ Shift+左键: 输入前进格数";
+    }
+    public String getOrderMoveJumpDown() {
+        String v = getLangString("order.move_jump_down");
+        return v != null ? v : "§e⇧ Shift+右键: 输入后退格数";
+    }
+    /** direction: -1 前进（上移），+1 后退（下移） */
+    public String getOrderMovePrompt(int direction) {
+        String v = getLangString(direction < 0 ? "order.move_prompt_up" : "order.move_prompt_down");
+        return (v != null ? v : "{prefix} &e请在聊天栏输入要前进的格数（1~999，输入 &ccancel &e取消）")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getOrderMoveInvalid() {
+        String v = getLangString("order.move_invalid");
+        return (v != null ? v : "{prefix} &c请输入 1~999 之间的整数（负数可反向）")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getOrderMoveCancelled() {
+        String v = getLangString("order.move_cancelled");
+        return (v != null ? v : "{prefix} &7已取消，返回排序菜单。")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getOrderMoveDone(String name, int position) {
+        String v = getLangString("order.move_done");
+        return (v != null ? v : "{prefix} &a已将 &f{name} &a移动到第 &f{position} &a位")
+                .replace("{prefix}", pluginPrefix)
+                .replace("{name}", name != null ? name : "?")
+                .replace("{position}", String.valueOf(position));
+    }
     public String getOrderSavedHint() {
         String v = getLangString("order.saved_hint");
         return v != null ? v : "§7调整即时保存，玩家列表同步生效";
@@ -302,5 +333,61 @@ public class ConfigManager {
         String v = getLangString("order.no_category");
         return (v != null ? v : "§c未知分类: {category}")
                 .replace("{category}", category != null ? category : "");
+    }
+
+    // 排序分享码（admin order export / import）
+    public String getShareExportHeader(int parts) {
+        String v = getLangString("order.share_export_header");
+        return (v != null ? v : "{prefix} &e排序配置已生成 &f{parts} &e段分享码，点击下方各行复制，到目标服务器聊天栏依次粘贴并回车：")
+                .replace("{prefix}", pluginPrefix)
+                .replace("{parts}", String.valueOf(parts));
+    }
+    public String getShareChunkLabel(int index, int total) {
+        String v = getLangString("order.share_chunk_label");
+        return (v != null ? v : "&a&l[ 点击复制第 {index}/{total} 段 ]")
+                .replace("{index}", String.valueOf(index))
+                .replace("{total}", String.valueOf(total));
+    }
+    public String getShareChunkHover() {
+        String v = getLangString("order.share_chunk_hover");
+        return v != null ? v : "&e点击复制导入指令\n&7到目标服务器聊天栏粘贴并回车";
+    }
+    public String getShareExportFooter() {
+        String v = getLangString("order.share_export_footer");
+        return (v != null ? v : "&7支持乱序粘贴，全部段收齐后自动导入并生效。");
+    }
+    public String getShareProgress(int received, int total) {
+        String v = getLangString("order.share_progress");
+        return (v != null ? v : "{prefix} &7已接收 &f{received}/{total} &7段，继续粘贴剩余分享码…")
+                .replace("{prefix}", pluginPrefix)
+                .replace("{received}", String.valueOf(received))
+                .replace("{total}", String.valueOf(total));
+    }
+    public String getShareDone(int categories, int hidden) {
+        String v = getLangString("order.share_done");
+        return (v != null ? v : "{prefix} &a导入完成：&f{categories} &a个分类顺序、&f{hidden} &a个隐藏记录已应用。")
+                .replace("{prefix}", pluginPrefix)
+                .replace("{categories}", String.valueOf(categories))
+                .replace("{hidden}", String.valueOf(hidden));
+    }
+    public String getShareBadChunk() {
+        String v = getLangString("order.share_bad_chunk");
+        return (v != null ? v : "{prefix} &c分享码段格式无效或已损坏。")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getShareEmpty() {
+        String v = getLangString("order.share_empty");
+        return (v != null ? v : "{prefix} &7当前还没有可导出的自定义排序，先在排序菜单里调整一次吧。")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getShareImportCancelled() {
+        String v = getLangString("order.share_import_cancelled");
+        return (v != null ? v : "{prefix} &7已取消本次分享码导入。")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getShareImportUsage() {
+        String v = getLangString("order.share_import_usage");
+        return (v != null ? v : "{prefix} &7用法: /alcerecipes admin order import <段码>（分享码由 export 生成）")
+                .replace("{prefix}", pluginPrefix);
     }
 }

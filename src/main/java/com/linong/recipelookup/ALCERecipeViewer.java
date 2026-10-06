@@ -25,6 +25,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
     private RecipeVisibilityManager visibilityManager;
     private UpdateChecker updateChecker;
     private RecipeOrderManager recipeOrderManager;
+    private OrderShareManager orderShareManager;
 
     /** typeId → 配方列表 */
     private volatile Map<String, List<CEBridge.RecipeData>> loadedRecipes = Map.of();
@@ -62,6 +63,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
 
         this.recipeGUI = new RecipeGUI(this);
         this.recipeOrderManager = new RecipeOrderManager(this);
+        this.orderShareManager = new OrderShareManager(this);
         this.updateChecker = new UpdateChecker(this);
         if (configManager.isUpdateCheckEnabled()) updateChecker.checkAsync();
 
@@ -309,6 +311,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
     public RecipeGUI getRecipeGUI() { return recipeGUI; }
     public UpdateChecker getUpdateChecker() { return updateChecker; }
     public RecipeOrderManager getRecipeOrderManager() { return recipeOrderManager; }
+    public OrderShareManager getOrderShareManager() { return orderShareManager; }
     public ChatSearchListener getChatSearchListener() { return chatSearchListener; }
     public RecipeVisibilityManager getVisibilityManager() { return visibilityManager; }
     public Map<String, List<CEBridge.RecipeData>> getLoadedRecipes() { return loadedRecipes; }

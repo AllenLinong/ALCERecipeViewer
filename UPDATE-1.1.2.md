@@ -1,6 +1,6 @@
 # 1.1.2 更新说明
 
-配方排序改为独立的排序菜单（`/alcerecipes admin order`），不再占用管理列表的 Shift 点击。
+配方排序改为独立的排序菜单（`/alcerecipes admin order`），不再占用管理列表的 Shift 点击；新增聊天输入多格移动与跨服分享码。
 
 ## 新指令：/alcerecipes admin order（管理员）
 
@@ -13,6 +13,26 @@
 - **左键点击物品 = 上移一位，右键 = 下移一位**，调整即时保存到 `recipe_order.yml` 并同步到所有玩家菜单。
 - 每个物品的 lore 标注了当前位置与操作提示；菜单底部带说明按钮与翻页按钮。
 - 同义写法：`/alcer admin order`、`/alcerecipes manage order`、`/alcerecipes admin sort`。
+
+## 排序菜单：输入格数一次移动多格
+
+- **Shift+左键**物品 → 聊天栏输入数字 N，一次前进（上移）N 格；**Shift+右键** → 后退（下移）N 格。
+- 输入 `cancel` 取消；支持负数反向；移动后菜单自动跳到物品落地的页并提示新位置。
+
+## 跨服分享码（LuckPerms exportcode / importcode 风格）
+
+游戏内直接把排序配置搬到另一台服务器，无需到后台复制文件：
+
+```
+/alcerecipes admin order export [分类ID]   生成分享码（不带分类 = 全部）
+/alcerecipes admin order import <段码>     在目标服务器逐段粘贴
+/alcerecipes admin order import            取消进行中的导入
+```
+
+- 分享码内容 = **各分类自定义顺序 + 隐藏列表**，gzip 压缩 + Base64，按聊天栏 256 字符限制自动分段。
+- 每段在聊天栏显示为可点击文本，**点击即复制完整导入指令**，到目标服务器聊天栏粘贴回车即可。
+- 支持乱序粘贴，全部段收齐后自动解码应用，并报告「N 个分类顺序 + N 个隐藏记录」。
+- 仍可走老办法：直接复制 `plugins/ALCERecipeViewer/recipe_order.yml` 与 `hidden_recipes.yml`（两台服务器 CraftEngine 配方包一致时效果相同）。
 
 ## 行为变化
 
