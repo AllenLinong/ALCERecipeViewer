@@ -2,6 +2,7 @@ package com.linong.recipelookup.command;
 
 import com.linong.recipelookup.ALCERecipeViewer;
 import com.linong.recipelookup.ConfigManager;
+import com.linong.recipelookup.MenuConfig;
 import com.linong.recipelookup.gui.RecipeGUI;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -54,6 +55,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
             case "clear" -> handleClear(player);
             case "create", "new" -> handleCreate(player);
             case "admin", "manage" -> handleAdmin(player);
+            case "order", "sort" -> handleOrder(player, args);
             default -> sendHelp(player);
         }
         return true;
@@ -103,6 +105,28 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(config.getPluginPrefix() + " " + config.getCreatorCleared());
     }
 
+    /** /alcerecipes order [分类ID] — 打开排序菜单（内容与玩家看到的一致，左键上移/右键下移） */
+    private void handleOrder(Player player, String[] args) {
+        if (!player.hasPermission("alcerecipeviewer.admin")) {
+            player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoPermission());
+            return;
+        }
+        if (plugin.getLoadedRecipes().isEmpty()) {
+            player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoRecipes());
+            return;
+        }
+        if (args.length >= 2) {
+            String category = args[1].toLowerCase();
+            if (!plugin.getLoadedRecipes().containsKey(category)) {
+                player.sendMessage(config.getPluginPrefix() + " " + config.getOrderNoCategory(category));
+                return;
+            }
+            gui.openOrderRecipeList(player, category, 0);
+            return;
+        }
+        gui.openOrderMainMenu(player);
+    }
+
     private void sendHelp(Player player) {
         player.sendMessage(config.getPluginPrefix() + " " + config.getCmdUsageTitle());
         player.sendMessage(config.getCmdUsageOpen());
@@ -111,6 +135,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e  /alcerecipes create §7- 打开新增配方菜单（管理员）");
         if (player.hasPermission("alcerecipeviewer.admin")) {
             player.sendMessage("§e  /alcerecipes admin §7- 打开配方管理菜单（管理员）");
+            player.sendMessage("§e  /alcerecipes order [分类] §7- 打开排序菜单调整配方顺序（管理员）");
         }
     }
 
@@ -121,9 +146,28 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
                                       @NotNull String[] args) {
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
-            return List.of("reload", "clear", "create", "admin", "manage").stream()
+            return List.of("reload", "clear", "create", "admin", "manage", "order", "sort").stream()
+                    .filter(s -> s.startsWith(prefix)).sorted().toList();
+        }
+        if (args.length == 2) {
+            String sub = args[0].toLowerCase();
+            if (!("order".equals(sub) || "sort".equals(sub))) return List.of();
+            String prefix = args[1].toLowerCase();
+            return availableCategories().stream()
                     .filter(s -> s.startsWith(prefix)).sorted().toList();
         }
         return List.of();
+    }
+
+    /** 主菜单配置里声明、且当前有配方数据的分类 */
+    private List<String> availableCategories() {
+        var menu = plugin.getMenuConfig().getMainMenu();
+        if (menu == null) return List.of();
+        return menu.buttons().values().stream()
+                .map(MenuConfig.ButtonDef::category)
+                .filter(c -> c != null && !c.isEmpty())
+                .filter(c -> plugin.getLoadedRecipes().containsKey(c))
+                .distinct()
+                .toList();
     }
 }

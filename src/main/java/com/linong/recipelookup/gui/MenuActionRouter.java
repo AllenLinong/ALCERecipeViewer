@@ -184,6 +184,7 @@ final class MenuActionRouter {
         switch (value.toLowerCase(Locale.ROOT)) {
             case "main" -> gui.openMainMenu(player);
             case "admin_main" -> gui.openAdminMainMenu(player);
+            case "order_main" -> gui.openOrderMainMenu(player);
             case "creator_type" -> gui.openRecipeCreatorType(player);
             default -> {
                 if (unknownActions.add("open:" + value)) {
@@ -197,6 +198,10 @@ final class MenuActionRouter {
 
     private void openCategory(Player player, MenuClickContext ctx, String value) {
         if (value.isEmpty()) return;
+        if (RecipeGUI.TYPE_ADMIN_ORDER_MAIN.equals(ctx.guiType())) {
+            gui.openOrderRecipeList(player, value, 0);
+            return;
+        }
         if (isAdmin(ctx)) gui.openAdminRecipeList(player, value, 0);
         else gui.openRecipeList(player, value, 0);
     }
@@ -206,6 +211,22 @@ final class MenuActionRouter {
         String categoryId = gui.getPlayerCategory(uuid);
         if (categoryId == null) return;
         int page = gui.getPlayerPage(uuid);
+
+        // 排序菜单翻页：与玩家列表同一套数据（隐藏已过滤）
+        if (RecipeGUI.TYPE_ADMIN_ORDER.equals(ctx.guiType())) {
+            if (direction < 0) {
+                if (page > 0) gui.openOrderRecipeList(player, categoryId, page - 1);
+                return;
+            }
+            java.util.Locale locale = gui.resolveLocale();
+            List<CEBridge.RecipeData> recipes = gui.getSortedRecipes(categoryId, null, locale, uuid);
+            MenuConfig.MenuDef menu = gui.getPlayerMenuDef(uuid);
+            if (menu == null) return;
+            int pageSize = MenuConfig.itemSlots(menu.shape()).size();
+            int totalPages = Math.max(1, (recipes.size() + pageSize - 1) / pageSize);
+            if (page < totalPages - 1) gui.openOrderRecipeList(player, categoryId, page + 1);
+            return;
+        }
 
         if (direction < 0) {
             if (page <= 0) return;
@@ -267,11 +288,20 @@ final class MenuActionRouter {
             }
             return;
         }
+        if (RecipeGUI.TYPE_ADMIN_ORDER.equals(ctx.guiType())) {
+            gui.openOrderMainMenu(player);
+            return;
+        }
         if (isAdmin(ctx)) gui.openAdminRecipeList(player, categoryId, page);
         else gui.openRecipeList(player, categoryId, page);
     }
 
     private void backToMain(Player player, MenuClickContext ctx, String value) {
+        if (RecipeGUI.TYPE_ADMIN_ORDER.equals(ctx.guiType())
+                || RecipeGUI.TYPE_ADMIN_ORDER_MAIN.equals(ctx.guiType())) {
+            gui.openOrderMainMenu(player);
+            return;
+        }
         if (isAdmin(ctx)) gui.openAdminMainMenu(player);
         else gui.openMainMenu(player);
     }
@@ -295,9 +325,8 @@ final class MenuActionRouter {
         else player.closeInventory();
     }
 
-    /** 配方列表动态区（'I'）点击：普通列表打开详情，管理列表切换可见性 */
+    /** 配方列表动态区（'I'）点击：普通列表打开详情，管理列表切换可见性，排序列表左键上移/右键下移 */
     private void clickRecipeEntry(Player player, MenuClickContext ctx, String value) {
-        if (ctx.click().isRightClick()) return;
         UUID uuid = player.getUniqueId();
         String categoryId = gui.getPlayerCategory(uuid);
         if (categoryId == null) return;
@@ -320,16 +349,25 @@ final class MenuActionRouter {
 
         int recipeIdx = page * itemSlots.size() + itemIndex;
         if (recipeIdx >= recipes.size()) return;
-        CEBridge.RecipeData recipe = recipes.get(recipeIdx);
 
-        if (admin) {
-            if (ctx.click().isShiftClick()) {
-                gui.moveRecipe(categoryId, recipe, ctx.click().isLeftClick() ? -1 : 1, recipes);
-            } else if (ctx.click().isLeftClick()) {
-                gui.toggleRecipeVisibility(player, recipe);
+        // 排序菜单：左键上移 / 右键下移，其他点击忽略
+        if (RecipeGUI.TYPE_ADMIN_ORDER.equals(ctx.guiType())) {
+            if (ctx.click().isLeftClick()) {
+                gui.moveVisibleRecipe(categoryId, recipes, recipeIdx, -1);
+            } else if (ctx.click().isRightClick()) {
+                gui.moveVisibleRecipe(categoryId, recipes, recipeIdx, 1);
             } else {
                 return;
             }
+            gui.openOrderRecipeList(player, categoryId, page);
+            return;
+        }
+
+        if (ctx.click().isRightClick()) return;
+        CEBridge.RecipeData recipe = recipes.get(recipeIdx);
+
+        if (admin) {
+            gui.toggleRecipeVisibility(player, recipe);
             gui.openAdminRecipeList(player, categoryId, page);
         } else {
             if (config.isDebug()) debugRecipeClick(player, recipe);

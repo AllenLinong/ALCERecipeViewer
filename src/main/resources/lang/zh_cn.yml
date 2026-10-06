@@ -186,8 +186,26 @@ menu:
   # 管理员菜单
   admin_main_title: "&8管理员 - 配方管理"
   admin_list_title: "&8管理员 - {category} ({page}/{total})"
+  # 排序菜单（/alcerecipes order）
+  order_list_title: "&8排序管理 - {category} ({page}/{total})"
+  order_hint_title: "&6&l⚙ 调整配方顺序"
+  order_hint_1: "&7左键点击物品: &e上移一位"
+  order_hint_2: "&7右键点击物品: &e下移一位"
+  order_hint_3: "&7顺序即时保存，玩家列表同步生效"
+  order_hint_4: "&7隐藏的配方不会出现在此处"
+  order_hint_back: "&7点击返回排序分类选择"
 
 # 管理员消息
 admin:
   toggle_hidden: "&c已隐藏配方"
   toggle_shown: "&a已显示配方"
+
+# 排序菜单（/alcerecipes order，仅管理员）
+order:
+  main_title: "&8排序管理 - 选择分类"
+  click_order: "&e▶ 点击调整配方顺序"
+  position: "&7当前位置: &f#{index}"
+  move_up: "&e◀ 左键: 上移一位"
+  move_down: "&e▶ 右键: 下移一位"
+  saved_hint: "&7调整即时保存，玩家列表同步生效"
+  no_category: "&c未知分类: {category}（Tab 补全可查看可用分类）"

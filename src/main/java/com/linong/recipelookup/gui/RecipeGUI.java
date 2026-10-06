@@ -33,6 +33,8 @@ public class RecipeGUI {
     public static final String TYPE_ADMIN_MAIN = "admin_main";
     public static final String TYPE_ADMIN_LIST = "admin_list";
     public static final String TYPE_ADMIN_DETAIL = "admin_detail";
+    public static final String TYPE_ADMIN_ORDER_MAIN = "admin_order_main";
+    public static final String TYPE_ADMIN_ORDER = "admin_order";
 
     public static final String SEARCH_MODE_RESULT = "result";
     public static final String SEARCH_MODE_INGREDIENT = "ingredient";
@@ -282,6 +284,147 @@ public class RecipeGUI {
         return item;
     }
 
+    // ===================== 排序管理菜单（管理员）=====================
+
+    /**
+     * 排序管理主菜单：复用主菜单布局，分类数量与玩家看到的一致（未隐藏计数），
+     * 点击分类进入该分类的排序列表（/alcerecipes order）。
+     */
+    public void openOrderMainMenu(Player player) {
+        MenuDef menu = menuConfig.getMainMenu();
+        if (menu == null) return;
+
+        int size = MenuConfig.shapeSize(menu.shape());
+        UUID uuid = player.getUniqueId();
+        Inventory inv = createGUIInventory(uuid, TYPE_ADMIN_ORDER_MAIN, size, config.getOrderMainTitle());
+
+        for (int row = 0; row < menu.shape().length; row++) {
+            String line = menu.shape()[row];
+            for (int col = 0; col < line.length() && col < 9; col++) {
+                char c = line.charAt(col);
+                int slot = row * 9 + col;
+                ButtonDef btn = menu.buttons().get(c);
+                if (btn == null) continue;
+
+                if (btn.dynamic()) continue;
+
+                if (c == '#') {
+                    inv.setItem(slot, buildButtonOrCE(btn, null));
+                } else {
+                    int count = visibleRecipeCount(btn.category());
+                    Map<String, String> v = MenuConfig.vars("count", String.valueOf(count));
+                    inv.setItem(slot, buildOrderCategoryButton(btn, v));
+                }
+            }
+        }
+
+        guiType.put(uuid, TYPE_ADMIN_ORDER_MAIN);
+        playerCategory.remove(uuid);
+        playerPage.remove(uuid);
+        playerMenuDef.put(uuid, menu);
+        openInventories.put(uuid, inv);
+        player.openInventory(inv);
+    }
+
+    /** 排序主菜单分类按钮：把「点击浏览」提示替换为「点击调整顺序」，避免两行重复 */
+    private ItemStack buildOrderCategoryButton(ButtonDef btn, Map<String, String> vars) {
+        ItemStack item = buildButtonOrCE(btn, vars);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            List<String> lore = meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+            String browse = config.getLangString("menu.click_browse");
+            int idx = browse != null ? lore.indexOf(browse) : -1;
+            if (idx >= 0) lore.set(idx, config.getOrderClick());
+            else lore.add(config.getOrderClick());
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /**
+     * 排序列表：内容与普通玩家看到的完全一致（隐藏过滤 + 去重 + CE 分类排序 + 自定义顺序），
+     * 左键上移 / 右键下移，调整即时保存。仅管理员可通过 /alcerecipes order 打开。
+     */
+    public void openOrderRecipeList(Player player, String categoryId, int page) {
+        if (categoryId == null) {
+            openOrderMainMenu(player);
+            return;
+        }
+        MenuDef menu = menuConfig.getOrderList();
+        if (menu == null) return;
+
+        UUID uuid = player.getUniqueId();
+        searchQuery.remove(uuid); // 排序菜单不参与搜索，清掉残留搜索词
+        Locale locale = resolveLocale();
+        List<CEBridge.RecipeData> recipes = getSortedRecipes(categoryId, null, locale, uuid);
+
+        List<Integer> itemSlots = MenuConfig.itemSlots(menu.shape());
+        int pageSize = itemSlots.size();
+        int totalPages = Math.max(1, (recipes.size() + pageSize - 1) / pageSize);
+        if (page < 0) page = 0;
+        if (page >= totalPages) page = totalPages - 1;
+
+        CEBridge.CategoryMeta meta = CEBridge.CATEGORIES.get(categoryId);
+        String categoryName = config.getDefaultCategoryName(categoryId);
+        if (meta != null && categoryName.equals(categoryId)) categoryName = meta.name;
+        String title = config.getOrderListTitle()
+                .replace("{category}", categoryName)
+                .replace("{page}", String.valueOf(page + 1))
+                .replace("{total}", String.valueOf(totalPages));
+
+        int size = MenuConfig.shapeSize(menu.shape());
+        Inventory inv = createGUIInventory(uuid, TYPE_ADMIN_ORDER, size, title);
+
+        int recipeIdx = page * pageSize;
+        for (int row = 0; row < menu.shape().length; row++) {
+            String line = menu.shape()[row];
+            for (int col = 0; col < line.length() && col < 9; col++) {
+                char c = line.charAt(col);
+                int slot = row * 9 + col;
+                ButtonDef btn = menu.buttons().get(c);
+                if (btn == null) continue;
+
+                if (c == 'I') {
+                    if (recipeIdx < recipes.size()) {
+                        CEBridge.RecipeData rec = recipes.get(recipeIdx);
+                        Map<String, List<CEBridge.RecipeData>> groups = playerResultRecipeGroups
+                                .getOrDefault(player.getUniqueId(), Map.of());
+                        List<CEBridge.RecipeData> group = groups.get(rec.resultId);
+                        int multiCount = group != null ? group.size() : 1;
+                        inv.setItem(slot, createOrderRecipeEntryIcon(rec, multiCount, recipeIdx + 1));
+                        recipeIdx++;
+                    }
+                } else if (c == '#') {
+                    inv.setItem(slot, buildButtonOrCE(btn, null));
+                } else {
+                    Map<String, String> v = MenuConfig.vars(
+                            "page", String.valueOf(page + 1),
+                            "total", String.valueOf(totalPages),
+                            "category", categoryName
+                    );
+                    inv.setItem(slot, buildButtonOrCE(btn, v));
+                }
+            }
+        }
+
+        guiType.put(uuid, TYPE_ADMIN_ORDER);
+        playerCategory.put(uuid, categoryId);
+        playerPage.put(uuid, page);
+        playerMenuDef.put(uuid, menu);
+        openInventories.put(uuid, inv);
+        playerRecipes.put(uuid, recipes);
+        player.openInventory(inv);
+    }
+
+    /** 排序菜单内移动：index 为当前可见列表下标，direction -1 上移 / +1 下移 */
+    public void moveVisibleRecipe(String categoryId, List<CEBridge.RecipeData> current, int index, int direction) {
+        if (categoryId == null || current == null) return;
+        List<String> ids = new ArrayList<>();
+        for (CEBridge.RecipeData r : current) ids.add(r.resultId);
+        plugin.getRecipeOrderManager().moveVisible(categoryId, ids, index, direction);
+    }
+
     // ===================== 配方列表 =====================
 
     public void openRecipeList(Player player, String categoryId, int page) {
@@ -403,9 +546,9 @@ public class RecipeGUI {
         for (CEBridge.RecipeData r : deduped) {
             nameMap.put(r, toChineseName(r.resultId, locale));
         }
-       sortByCeCategories(deduped);
+        sortByCeCategories(deduped);
         plugin.getRecipeOrderManager().apply(categoryId, deduped);
-       return deduped;
+        return deduped;
     }
 
     public void clearSearch(Player player) {
@@ -516,9 +659,9 @@ public class RecipeGUI {
         for (CEBridge.RecipeData r : deduped) {
             nameMap.put(r, toChineseName(r.resultId, locale));
         }
-       sortByCeCategories(deduped);
+        sortByCeCategories(deduped);
         plugin.getRecipeOrderManager().apply(categoryId, deduped);
-       return deduped;
+        return deduped;
     }
 
     public void clearAdminSearch(Player player) {
@@ -538,11 +681,6 @@ public class RecipeGUI {
             player.sendMessage(config.getPluginPrefix() + " §a已显示 §f" + name + " §a的配方（普通玩家可见）");
         }
         return hidden;
-    }
-
-    public void moveRecipe(String categoryId, CEBridge.RecipeData recipe, int direction, List<CEBridge.RecipeData> current) {
-        if (categoryId == null || recipe == null) return;
-        plugin.getRecipeOrderManager().move(categoryId, recipe.resultId, direction, current);
     }
 
     // ===================== 新增配方 GUI（管理员）=====================
@@ -1703,6 +1841,31 @@ public class RecipeGUI {
         }
         lore.add("");
         lore.add("§e▶ 点击切换显示/隐藏");
+        lore.add("§7调整顺序: §f/alcerecipes order");
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.setLore(lore);
+            item.setItemMeta(meta);
+        }
+        return markGUIItem(item);
+    }
+
+    /** 排序菜单条目：位置 + 左键上移 / 右键下移提示 */
+    private ItemStack createOrderRecipeEntryIcon(CEBridge.RecipeData recipe, int recipeCount, int position) {
+        ItemStack item = bridge.buildItemStack(recipe.resultId, recipe.resultCount);
+        String typeName = config.getRecipeTypeName(recipe.type);
+        List<String> lore = new ArrayList<>();
+        lore.add(config.getBtnLoreResult(recipe.resultCount));
+        lore.add(config.getBtnLoreType(typeName));
+        if (recipeCount > 1) {
+            lore.add(config.getBtnLoreMultiRecipes(recipeCount));
+        }
+        lore.add("");
+        lore.add(config.getOrderPosition(position));
+        lore.add(config.getOrderMoveUp());
+        lore.add(config.getOrderMoveDown());
+        lore.add("");
+        lore.add(config.getOrderSavedHint());
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setLore(lore);

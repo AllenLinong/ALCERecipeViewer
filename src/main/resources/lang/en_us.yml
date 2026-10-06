@@ -168,8 +168,26 @@ menu:
   # Admin menu
   admin_main_title: "&8Admin - Recipe Manager"
   admin_list_title: "&8Admin - {category} ({page}/{total})"
+  # Order menu (/alcerecipes order)
+  order_list_title: "&8Order - {category} ({page}/{total})"
+  order_hint_title: "&6&l⚙ Adjust Recipe Order"
+  order_hint_1: "&7Left-click item: &eMove up"
+  order_hint_2: "&7Right-click item: &eMove down"
+  order_hint_3: "&7Saved instantly, player menus follow"
+  order_hint_4: "&7Hidden recipes are not shown here"
+  order_hint_back: "&7Click to return to category selection"
 
 # Admin messages
 admin:
   toggle_hidden: "&cRecipe hidden"
   toggle_shown: "&aRecipe shown"
+
+# Order menu (/alcerecipes order, admin only)
+order:
+  main_title: "&8Order - Select Category"
+  click_order: "&e▶ Click to adjust order"
+  position: "&7Position: &f#{index}"
+  move_up: "&e◀ Left-click: Move up"
+  move_down: "&e▶ Right-click: Move down"
+  saved_hint: "&7Saved instantly, player menus follow"
+  no_category: "&cUnknown category: {category} (Tab-complete to list)"

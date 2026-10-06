@@ -34,6 +34,7 @@ public class MenuConfig {
     // 已解析的菜单
     private MenuDef mainMenu;
     private MenuDef recipeList;
+    private MenuDef orderList;
     private MenuDef detailCrafting;
     private MenuDef detailFurnace;
     private MenuDef detailSmithing;
@@ -55,13 +56,15 @@ public class MenuConfig {
 
     // ==================== 加载 ====================
 
-    /** 菜单配置版本：v2 = triggers 动作体系（1.1.0） */
-    private static final int CONFIG_VERSION = 2;
+    /** menu.yml 配置版本：v3 = 新增排序管理菜单 order_list（1.1.2） */
+    private static final int CONFIG_VERSION = 3;
+    /** recipesmenu.yml 配置版本（与 menu.yml 各自独立维护） */
+    private static final int CREATOR_CONFIG_VERSION = 2;
 
     public void load() {
         this.config = plugin.getConfigManager();
-        migrateMenuFile("menu.yml");
-        migrateMenuFile("recipesmenu.yml");
+        migrateMenuFile("menu.yml", CONFIG_VERSION);
+        migrateMenuFile("recipesmenu.yml", CREATOR_CONFIG_VERSION);
 
         file = new File(plugin.getDataFolder(), "menu.yml");
         yaml = YamlConfiguration.loadConfiguration(file);
@@ -78,6 +81,7 @@ public class MenuConfig {
 
         mainMenu = parseMenu("main_menu");
         recipeList = parseMenu("recipe_list");
+        orderList = parseMenu("order_list");
         detailCrafting = parseMenu("detail_crafting");
         detailFurnace = parseMenu("detail_furnace");
         detailSmithing = parseMenu("detail_smithing");
@@ -105,7 +109,7 @@ public class MenuConfig {
      *   <li>版本已达当前 → 什么都不做。</li>
      * </ul>
      */
-    private void migrateMenuFile(String name) {
+    private void migrateMenuFile(String name, int targetVersion) {
         File diskFile = new File(plugin.getDataFolder(), name);
         if (!diskFile.exists()) {
             plugin.saveResource(name, false);
@@ -114,7 +118,7 @@ public class MenuConfig {
 
         YamlConfiguration disk = YamlConfiguration.loadConfiguration(diskFile);
         int version = disk.getInt("config_version", 1);
-        if (version >= CONFIG_VERSION) return;
+        if (version >= targetVersion) return;
 
         // 旧版本先备份，升级出问题可随时用 .bak 回滚
         File backup = new File(plugin.getDataFolder(), name + ".bak");
@@ -131,11 +135,11 @@ public class MenuConfig {
         // 确保版本号已写入（merge 已带出 jar 里的 config_version，这里兜底）
         try {
             disk = YamlConfiguration.loadConfiguration(diskFile);
-            if (disk.getInt("config_version", 0) < CONFIG_VERSION) {
-                disk.set("config_version", CONFIG_VERSION);
+            if (disk.getInt("config_version", 0) < targetVersion) {
+                disk.set("config_version", targetVersion);
                 disk.save(diskFile);
             }
-            plugin.getLogger().info("  [OK] " + name + " 已升级到 v" + CONFIG_VERSION
+            plugin.getLogger().info("  [OK] " + name + " 已升级到 v" + targetVersion
                     + "（旧文件备份为 " + name + ".bak，自定义修改已保留）");
         } catch (Exception e) {
             plugin.getLogger().warning("写入 " + name + " 版本号失败: " + e.getMessage());
@@ -373,6 +377,7 @@ public class MenuConfig {
 
     public MenuDef getMainMenu() { return mainMenu; }
     public MenuDef getRecipeList() { return recipeList; }
+    public MenuDef getOrderList() { return orderList; }
     public MenuDef getDetailCrafting() { return detailCrafting; }
     public MenuDef getDetailFurnace() { return detailFurnace; }
     public MenuDef getDetailSmithing() { return detailSmithing; }

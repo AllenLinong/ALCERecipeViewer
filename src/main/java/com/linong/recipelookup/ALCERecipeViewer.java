@@ -23,7 +23,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
     private RecipeGUI recipeGUI;
     private ChatSearchListener chatSearchListener;
     private RecipeVisibilityManager visibilityManager;
-   private UpdateChecker updateChecker;
+    private UpdateChecker updateChecker;
     private RecipeOrderManager recipeOrderManager;
 
     /** typeId → 配方列表 */
@@ -60,7 +60,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
             // 不禁用插件，允许使用 /alcerecipes reload 重试
         }
 
-       this.recipeGUI = new RecipeGUI(this);
+        this.recipeGUI = new RecipeGUI(this);
         this.recipeOrderManager = new RecipeOrderManager(this);
         this.updateChecker = new UpdateChecker(this);
         if (configManager.isUpdateCheckEnabled()) updateChecker.checkAsync();
@@ -307,7 +307,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
     public MenuConfig getMenuConfig() { return menuConfig; }
     public CEBridge getCEBridge() { return ceBridge; }
     public RecipeGUI getRecipeGUI() { return recipeGUI; }
-   public UpdateChecker getUpdateChecker() { return updateChecker; }
+    public UpdateChecker getUpdateChecker() { return updateChecker; }
     public RecipeOrderManager getRecipeOrderManager() { return recipeOrderManager; }
     public ChatSearchListener getChatSearchListener() { return chatSearchListener; }
     public RecipeVisibilityManager getVisibilityManager() { return visibilityManager; }

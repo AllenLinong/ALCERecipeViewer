@@ -267,4 +267,40 @@ public class ConfigManager {
         String v = getLangString("admin.toggle_shown");
         return v != null ? v : "§a已显示配方";
     }
+
+    // 排序菜单（/alcerecipes order）
+    public String getOrderMainTitle() {
+        String v = getLangString("order.main_title");
+        return v != null ? v : "§8排序管理 - 选择分类";
+    }
+    public String getOrderListTitle() {
+        String v = getLangString("menu.order_list_title");
+        return v != null ? v : "§8排序管理 - {category} ({page}/{total})";
+    }
+    public String getOrderClick() {
+        String v = getLangString("order.click_order");
+        return v != null ? v : "§e▶ 点击调整配方顺序";
+    }
+    public String getOrderPosition(int index) {
+        String v = getLangString("order.position");
+        return (v != null ? v : "§7当前位置: &f#{index}")
+                .replace("{index}", String.valueOf(index));
+    }
+    public String getOrderMoveUp() {
+        String v = getLangString("order.move_up");
+        return v != null ? v : "§e◀ 左键: 上移一位";
+    }
+    public String getOrderMoveDown() {
+        String v = getLangString("order.move_down");
+        return v != null ? v : "§e▶ 右键: 下移一位";
+    }
+    public String getOrderSavedHint() {
+        String v = getLangString("order.saved_hint");
+        return v != null ? v : "§7调整即时保存，玩家列表同步生效";
+    }
+    public String getOrderNoCategory(String category) {
+        String v = getLangString("order.no_category");
+        return (v != null ? v : "§c未知分类: {category}")
+                .replace("{category}", category != null ? category : "");
+    }
 }

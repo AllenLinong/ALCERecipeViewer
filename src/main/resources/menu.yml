@@ -1,8 +1,9 @@
 # ============================================================
 # AL-RecipeViewer 菜单配置文件 (Shape 布局)
 #
-# 配置版本 config_version: 2 —— 插件启动时自动升级旧版本配置：
+# 配置版本 config_version: 3 —— 插件启动时自动升级旧版本配置：
 #   只补缺失的新键（连同注释），自定义过的键一律保留原样，旧文件备份为 menu.yml.bak
+#   v3 新增：排序管理菜单 order_list（/alcerecipes order）
 #
 # 文字使用 {@key} 引用 lang 文件中的 menu 节点
 #
@@ -33,17 +34,17 @@
 #   op: 命令                 - 临时 OP 身份执行，结束后恢复
 #   console: 命令            - 控制台身份执行
 #   message: 文本            - 给玩家发消息（支持 & 颜色码）
-#   open: main|admin_main|creator_type - 打开指定菜单
+#   open: main|admin_main|order_main|creator_type - 打开指定菜单
 #   delay: 20                - 延迟后续动作，支持 20、20t、1s、500ms（wait 同义）
 # 命令类动作用英文分号分隔多条，开头的 / 可写可不写
 # 占位符: {player}/%player_name%、{uuid}/%player_uuid%、{world}/%world%
 #
 # 本插件的业务动作:
-#   open_category: 分类ID    - 打开分类配方列表
+#   open_category: 分类ID    - 打开分类配方列表（在排序主菜单中则打开排序列表）
 #   prev_page / next_page    - 翻页
 #   search / search_mode / search_clear - 搜索 / 切换搜索模式 / 清空搜索
-#   back                     - 返回上一级（详情→列表、创建器→列表）
-#   back_to_main             - 返回主菜单
+#   back                     - 返回上一级（详情→列表、创建器→列表、排序列表→排序主菜单）
+#   back_to_main             - 返回主菜单（排序列表中返回排序主菜单）
 #   create_recipe            - 打开配方创建器（需 alcerecipeviewer.admin 权限）
 #   prev_recipe / next_recipe - 多配方轮播手动切换
 #   open_creator: 类型       - 打开指定类型创建器（shaped/shapeless/furnace/smithing/
@@ -58,7 +59,7 @@
 # ============================================================
 
 # 配置版本（插件自动维护，请勿手动调小）
-config_version: 2
+config_version: 3
 
 # ===== 主菜单 =====
 main_menu:
@@ -268,6 +269,64 @@ recipe_list:
       triggers:
         left:
           - "close"
+    # 背景填充
+    "#":
+      material: "BLACK_STAINED_GLASS_PANE"
+      name: " "
+
+# ===== 排序管理列表（管理员，/alcerecipes order）=====
+# 内容与普通玩家看到的列表完全一致（已隐藏的配方不显示）。
+# 左键点击配方物品 = 上移一位，右键 = 下移一位，调整即时保存到 recipe_order.yml。
+# 排序主菜单复用 main_menu 布局（标题不同），分类按钮点击进入本列表。
+order_list:
+  title: "{@order_list_title}"
+  shape:
+    - "#########"
+    - "#IIIIIII#"
+    - "#IIIIIII#"
+    - "#IIIIIII#"
+    - "#IIIIIII#"
+    - "P#H#B###N"
+  buttons:
+    # 动态物品区 — 显示当前页的配方图标（玩家视角顺序）
+    I:
+      dynamic: true
+    # 上一页
+    P:
+      material: "ARROW"
+      name: "{@prev_page}"
+      lore:
+        - "{@page_indicator}"
+      triggers:
+        left:
+          - "prev_page"
+    # 操作说明（纯展示，无动作）
+    H:
+      material: "COMPARATOR"
+      name: "{@order_hint_title}"
+      lore:
+        - "{@order_hint_1}"
+        - "{@order_hint_2}"
+        - "{@order_hint_3}"
+        - "{@order_hint_4}"
+    # 返回排序分类选择
+    B:
+      material: "OAK_DOOR"
+      name: "{@back_to_main}"
+      lore:
+        - "{@order_hint_back}"
+      triggers:
+        left:
+          - "back_to_main"
+    # 下一页
+    N:
+      material: "ARROW"
+      name: "{@next_page}"
+      lore:
+        - "{@page_indicator}"
+      triggers:
+        left:
+          - "next_page"
     # 背景填充
     "#":
       material: "BLACK_STAINED_GLASS_PANE"

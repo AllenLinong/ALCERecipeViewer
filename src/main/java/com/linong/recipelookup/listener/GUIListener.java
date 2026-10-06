@@ -109,7 +109,8 @@ public class GUIListener implements Listener {
         // 按钮优先走 PDC 动作；配方列表动态区（'I'）合成 recipe_entry 动作
         if (routeButton(player, event, guiType)) return;
 
-        if (RecipeGUI.TYPE_LIST.equals(guiType) || RecipeGUI.TYPE_ADMIN_LIST.equals(guiType)) {
+        if (RecipeGUI.TYPE_LIST.equals(guiType) || RecipeGUI.TYPE_ADMIN_LIST.equals(guiType)
+                || RecipeGUI.TYPE_ADMIN_ORDER.equals(guiType)) {
             MenuDef menu = gui.getPlayerMenuDef(uuid);
             if (menu == null) return;
             ButtonDef btn = MenuConfig.buttonAt(menu, event.getSlot());
