@@ -352,6 +352,19 @@ public class ConfigManager {
         String v = getLangString("order.share_chunk_hover");
         return v != null ? v : "&e点击复制导入指令\n&7到目标服务器聊天栏粘贴并回车";
     }
+    public String getShareExportSingle() {
+        String v = getLangString("order.share_export_single");
+        return (v != null ? v : "{prefix} &a本次改动很小，只需一段：点击复制，到目标服务器聊天栏粘贴并回车即可。")
+                .replace("{prefix}", pluginPrefix);
+    }
+    public String getShareFullLabel() {
+        String v = getLangString("order.share_full_label");
+        return v != null ? v : "&6&l[ 点击复制完整指令（控制台/命令方块用，一段搞定） ]";
+    }
+    public String getShareFullHover() {
+        String v = getLangString("order.share_full_hover");
+        return v != null ? v : "&e点击复制完整导入指令\n&7粘贴到目标服务器控制台回车，一次导入\n&7或放进命令方块设为「始终活动」";
+    }
     public String getShareExportFooter() {
         String v = getLangString("order.share_export_footer");
         return (v != null ? v : "&7支持乱序粘贴，全部段收齐后自动导入并生效。");

@@ -3,6 +3,7 @@ package com.linong.recipelookup.command;
 import com.linong.recipelookup.ALCERecipeViewer;
 import com.linong.recipelookup.ConfigManager;
 import com.linong.recipelookup.MenuConfig;
+import com.linong.recipelookup.OrderShareManager;
 import com.linong.recipelookup.gui.RecipeGUI;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
@@ -39,6 +40,15 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
                              @NotNull String label,
                              @NotNull String[] args) {
         if (!(sender instanceof Player player)) {
+            // 控制台仅支持分享码导入（完整指令一段式粘贴）
+            if (args.length >= 4
+                    && ("admin".equalsIgnoreCase(args[0]) || "manage".equalsIgnoreCase(args[0]))
+                    && ("order".equalsIgnoreCase(args[1]) || "sort".equalsIgnoreCase(args[1]))
+                    && "import".equalsIgnoreCase(args[2])) {
+                plugin.getOrderShareManager()
+                        .receiveChunk(sender, OrderShareManager.CONSOLE_KEY, args[3]);
+                return true;
+            }
             sender.sendMessage(config.getCmdPlayerOnly());
             return true;
         }
@@ -150,20 +160,32 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(config.getPluginPrefix() + " " + config.getOrderNoCategory(category));
             return;
         }
-        List<String> chunks = plugin.getOrderShareManager()
+        OrderShareManager.ExportResult result = plugin.getOrderShareManager()
                 .exportCode(category == null || category.isEmpty() ? null : category);
-        if (chunks.isEmpty()) {
+        if (result == null) {
             player.sendMessage(config.getPluginPrefix() + " " + config.getShareEmpty());
             return;
         }
-        player.sendMessage(config.getShareExportHeader(chunks.size()));
-        for (int i = 0; i < chunks.size(); i++) {
-            String command = "/alcerecipes admin order import "
-                    + (i + 1) + "/" + chunks.size() + ":" + chunks.get(i);
+        int total = result.parts().size();
+        if (total == 1) {
+            // 增量很小：单段搞定，点一次粘一次完事
+            player.sendMessage(config.getShareExportSingle());
+        } else {
+            player.sendMessage(config.getShareExportHeader(total));
+        }
+        for (int i = 0; i < total; i++) {
+            String command = "/alcerecipes admin order import " + result.parts().get(i);
             sendCopyable(player,
-                    config.getShareChunkLabel(i + 1, chunks.size()),
+                    config.getShareChunkLabel(i + 1, total),
                     command,
                     config.getShareChunkHover());
+        }
+        if (total > 1 && result.fullCommand() != null) {
+            // 长码附加一段式完整指令：控制台 / 命令方块粘贴一次导入
+            sendCopyable(player,
+                    config.getShareFullLabel(),
+                    result.fullCommand(),
+                    config.getShareFullHover());
         }
         player.sendMessage(config.getPluginPrefix() + " " + config.getShareExportFooter());
     }
@@ -171,7 +193,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
     /** 逐段接收分享码；无段码参数时取消进行中的导入 */
     private void handleImport(Player player, String[] args) {
         if (args.length >= 4) {
-            plugin.getOrderShareManager().receiveChunk(player, args[3]);
+            plugin.getOrderShareManager().receiveChunk(player, player.getUniqueId(), args[3]);
             return;
         }
         if (plugin.getOrderShareManager().hasSession(player.getUniqueId())) {
