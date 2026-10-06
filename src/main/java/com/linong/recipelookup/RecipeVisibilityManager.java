@@ -88,13 +88,6 @@ public class RecipeVisibilityManager {
         return new HashSet<>(hiddenItemIds);
     }
 
-    /** 整体替换隐藏列表（分享码导入用） */
-    public void setHiddenItems(java.util.Collection<String> ids) {
-        hiddenItemIds.clear();
-        if (ids != null) hiddenItemIds.addAll(ids);
-        save();
-    }
-
     public int getHiddenCount() {
         return hiddenItemIds.size();
     }

@@ -194,7 +194,6 @@ menu:
   order_hint_3: "&7Shift+左键/右键: &e输入前进/后退格数"
   order_hint_4: "&7顺序即时保存，玩家列表同步生效"
   order_hint_5: "&7隐藏的配方不会出现在此处"
-  order_hint_share: "&7跨服同步: &f/alcerecipes admin order export"
   order_hint_back: "&7点击返回排序分类选择"
 
 # 管理员消息
@@ -218,17 +217,3 @@ order:
   move_invalid: "{prefix} &c请输入 1~999 之间的整数（负数可反向）"
   move_cancelled: "{prefix} &7已取消，返回排序菜单。"
   move_done: "{prefix} &a已将 &f{name} &a移动到第 &f{position} &a位"
-  # 分享码导出/导入（LuckPerms exportcode 风格）
-  share_export_header: "{prefix} &e排序配置已生成 &f{parts} &e段分享码，点击下方各行复制，到目标服务器聊天栏依次粘贴并回车："
-  share_chunk_label: "&a&l[ 点击复制第 {index}/{total} 段 ]"
-  share_chunk_hover: "&e点击复制导入指令\n&7到目标服务器聊天栏粘贴并回车"
-  share_export_single: "{prefix} &a本次改动很小，只需一段：点击复制，到目标服务器聊天栏粘贴并回车即可。"
-  share_full_label: "&6&l[ 点击复制完整指令（控制台/命令方块用，一段搞定） ]"
-  share_full_hover: "&e点击复制完整导入指令\n&7粘贴到目标服务器控制台回车，一次导入\n&7或放进命令方块设为「始终活动」"
-  share_export_footer: "&7支持乱序粘贴，全部段收齐后自动导入并生效。"
-  share_progress: "{prefix} &7已接收 &f{received}/{total} &7段，继续粘贴剩余分享码…"
-  share_done: "{prefix} &a导入完成：&f{categories} &a个分类顺序、&f{hidden} &a个隐藏记录已应用。"
-  share_bad_chunk: "{prefix} &c分享码段格式无效或已损坏。"
-  share_empty: "{prefix} &7当前还没有可导出的自定义排序，先在排序菜单里调整一次吧。"
-  share_import_cancelled: "{prefix} &7已取消本次分享码导入。"
-  share_import_usage: "{prefix} &7用法: /alcerecipes admin order import <段码>（分享码由 export 生成）"

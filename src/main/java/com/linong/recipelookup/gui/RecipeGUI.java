@@ -425,24 +425,6 @@ public class RecipeGUI {
         plugin.getRecipeOrderManager().moveVisible(categoryId, ids, index, direction);
     }
 
-    /**
-     * 该分类的「CE 默认顺序」可见物品列表（隐藏过滤 + 去重 + sortByCeCategories，不含自定义顺序）。
-     * 分享码增量导出/导入用它做基准：两边服务器 CE 包一致时基准相同，只需传输差异。
-     */
-    public List<String> defaultVisibleOrder(String categoryId) {
-        List<CEBridge.RecipeData> all = plugin.getLoadedRecipes().getOrDefault(categoryId, List.of());
-        List<CEBridge.RecipeData> deduped = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (CEBridge.RecipeData r : all) {
-            if (plugin.getVisibilityManager().isHidden(r.resultId)) continue;
-            if (seen.add(r.resultId)) deduped.add(r);
-        }
-        sortByCeCategories(deduped);
-        List<String> ids = new ArrayList<>();
-        for (CEBridge.RecipeData r : deduped) ids.add(r.resultId);
-        return ids;
-    }
-
     /** 待输入的排序移动：direction -1 = 前进（上移），+1 = 后退（下移） */
     public record PendingOrderMove(String categoryId, String resultId, int direction, int page) {}
 

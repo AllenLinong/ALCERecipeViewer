@@ -240,7 +240,6 @@ public class GUIListener implements Listener {
         Player player = event.getPlayer();
         gui.discardPlayer(player.getUniqueId());
         clickService.clearCooldowns(player.getUniqueId());
-        plugin.getOrderShareManager().clearSession(player.getUniqueId());
         scheduleGUIItemCleanup(player, true);
         plugin.getFoliaLib().getScheduler().runLater(task -> plugin.getUpdateChecker().notifyAdmin(player), 40);
 
@@ -251,7 +250,6 @@ public class GUIListener implements Listener {
         plugin.getChatSearchListener().cancelSearch(event.getPlayer());
         clickService.clearCooldowns(event.getPlayer().getUniqueId());
         gui.discardPlayer(event.getPlayer().getUniqueId());
-        plugin.getOrderShareManager().clearSession(event.getPlayer().getUniqueId());
     }
 
     // ========== 点击路由 ==========

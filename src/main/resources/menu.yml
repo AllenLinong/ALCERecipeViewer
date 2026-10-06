@@ -310,7 +310,6 @@ order_list:
         - "{@order_hint_3}"
         - "{@order_hint_4}"
         - "{@order_hint_5}"
-        - "{@order_hint_share}"
     # 返回排序分类选择
     B:
       material: "OAK_DOOR"

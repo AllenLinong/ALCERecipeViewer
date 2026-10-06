@@ -52,19 +52,6 @@ public final class RecipeOrderManager {
         recipes.sort(Comparator.comparingInt(recipe -> indexes.getOrDefault(recipe.resultId, Integer.MAX_VALUE)));
     }
 
-    /** 全部分类顺序快照（分享码导出用） */
-    public Map<String, List<String>> snapshot() {
-        Map<String, List<String>> copy = new HashMap<>();
-        orders.forEach((k, v) -> copy.put(k, new ArrayList<>(v)));
-        return copy;
-    }
-
-    /** 整体替换某分类的顺序（分享码导入用） */
-    public void importOrder(String category, List<String> ids) {
-        orders.put(category, new ArrayList<>(ids));
-        save();
-    }
-
     /**
      * 在可见列表内把 index 位置的物品移动一位（direction: -1 上移 / +1 下移），
      * 并把交换后的完整可见顺序持久化（含跨可见/隐藏边界的正确语义）。
