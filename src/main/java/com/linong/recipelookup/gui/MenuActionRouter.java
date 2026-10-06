@@ -297,6 +297,7 @@ final class MenuActionRouter {
 
     /** 配方列表动态区（'I'）点击：普通列表打开详情，管理列表切换可见性 */
     private void clickRecipeEntry(Player player, MenuClickContext ctx, String value) {
+        if (ctx.click().isRightClick()) return;
         UUID uuid = player.getUniqueId();
         String categoryId = gui.getPlayerCategory(uuid);
         if (categoryId == null) return;
@@ -322,7 +323,13 @@ final class MenuActionRouter {
         CEBridge.RecipeData recipe = recipes.get(recipeIdx);
 
         if (admin) {
-            gui.toggleRecipeVisibility(player, recipe);
+            if (ctx.click().isShiftClick()) {
+                gui.moveRecipe(categoryId, recipe, ctx.click().isLeftClick() ? -1 : 1, recipes);
+            } else if (ctx.click().isLeftClick()) {
+                gui.toggleRecipeVisibility(player, recipe);
+            } else {
+                return;
+            }
             gui.openAdminRecipeList(player, categoryId, page);
         } else {
             if (config.isDebug()) debugRecipeClick(player, recipe);

@@ -23,6 +23,8 @@ public final class ALCERecipeViewer extends JavaPlugin {
     private RecipeGUI recipeGUI;
     private ChatSearchListener chatSearchListener;
     private RecipeVisibilityManager visibilityManager;
+   private UpdateChecker updateChecker;
+    private RecipeOrderManager recipeOrderManager;
 
     /** typeId → 配方列表 */
     private volatile Map<String, List<CEBridge.RecipeData>> loadedRecipes = Map.of();
@@ -58,7 +60,10 @@ public final class ALCERecipeViewer extends JavaPlugin {
             // 不禁用插件，允许使用 /alcerecipes reload 重试
         }
 
-        this.recipeGUI = new RecipeGUI(this);
+       this.recipeGUI = new RecipeGUI(this);
+        this.recipeOrderManager = new RecipeOrderManager(this);
+        this.updateChecker = new UpdateChecker(this);
+        if (configManager.isUpdateCheckEnabled()) updateChecker.checkAsync();
 
         if (ceBridge.isAvailable()) {
             ceBridge.registerReloadListener(this, this::onCraftEngineReload);
@@ -127,6 +132,7 @@ public final class ALCERecipeViewer extends JavaPlugin {
             configManager.reload();
             menuConfig.reload();
             visibilityManager.reload();
+            recipeGUI.reloadCeCategories();
             if (!ceBridge.isAvailable() && !ceBridge.reconnect()) {
                 this.loadedRecipes = Map.of();
                 return;
@@ -301,6 +307,8 @@ public final class ALCERecipeViewer extends JavaPlugin {
     public MenuConfig getMenuConfig() { return menuConfig; }
     public CEBridge getCEBridge() { return ceBridge; }
     public RecipeGUI getRecipeGUI() { return recipeGUI; }
+   public UpdateChecker getUpdateChecker() { return updateChecker; }
+    public RecipeOrderManager getRecipeOrderManager() { return recipeOrderManager; }
     public ChatSearchListener getChatSearchListener() { return chatSearchListener; }
     public RecipeVisibilityManager getVisibilityManager() { return visibilityManager; }
     public Map<String, List<CEBridge.RecipeData>> getLoadedRecipes() { return loadedRecipes; }

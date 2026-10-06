@@ -34,6 +34,7 @@ public class ConfigManager {
     private String language;
     private double buttonCooldownSeconds;
     private String defaultButtonSound;
+    private boolean updateCheck;
 
     // lang.yml
     private String pluginPrefix;
@@ -62,6 +63,7 @@ public class ConfigManager {
         language = mainConfig.getString("language", "zh_cn");
         buttonCooldownSeconds = Math.max(0.0D, mainConfig.getDouble("features.button-cooldown-seconds", 0.3D));
         defaultButtonSound = mainConfig.getString("features.default-button-sound", "block.note_block.pling");
+        updateCheck = mainConfig.getBoolean("features.update-check", true);
 
         // 按配置语言加载语言文件
         String langPath = "lang/" + language + ".yml";
@@ -208,6 +210,7 @@ public class ConfigManager {
 
     /** 按钮未配置音效时的默认点击音 */
     public String getDefaultButtonSound() { return defaultButtonSound; }
+    public boolean isUpdateCheckEnabled() { return updateCheck; }
     public int getMultiRecipeCycleSeconds() { return Math.max(1, multiRecipeCycleSeconds); }
     public String getLanguage() { return language; }
     /** 从语言文件读取指定路径的文本 */

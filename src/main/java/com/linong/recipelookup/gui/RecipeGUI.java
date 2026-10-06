@@ -47,6 +47,7 @@ public class RecipeGUI {
     private final NamespacedKey shiftLeftActionKey;
     private final NamespacedKey shiftRightActionKey;
     private final NamespacedKey buttonSoundKey;
+    private final Map<String, CeCategory> ceCategories = new LinkedHashMap<>();
 
     private final Map<UUID, String> guiType = new ConcurrentHashMap<>();
     private final Map<UUID, String> playerCategory = new ConcurrentHashMap<>();
@@ -77,6 +78,78 @@ public class RecipeGUI {
         this.shiftLeftActionKey = new NamespacedKey(plugin, "gui_shift_left_action");
         this.shiftRightActionKey = new NamespacedKey(plugin, "gui_shift_right_action");
         this.buttonSoundKey = new NamespacedKey(plugin, "gui_button_sound");
+    }
+
+    public void reloadCeCategories() {
+        ceCategories.clear();
+        java.io.File resources = bridge.getCEPlugin() == null
+                ? new java.io.File("plugins/CraftEngine/resources")
+                : new java.io.File(bridge.getCEPlugin().getDataFolder(), "resources");
+        java.io.File[] packs = resources.listFiles(java.io.File::isDirectory);
+        if (packs == null) return;
+        Arrays.sort(packs, Comparator.comparing(java.io.File::getName));
+        for (java.io.File pack : packs) {
+            java.io.File file = new java.io.File(pack, "configuration/categories.yml");
+            if (!file.isFile()) continue;
+            try {
+                org.bukkit.configuration.file.YamlConfiguration yaml =
+                        org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
+                org.bukkit.configuration.ConfigurationSection section = yaml.getConfigurationSection("categories");
+                if (section == null) continue;
+                for (String id : section.getKeys(false)) {
+                    org.bukkit.configuration.ConfigurationSection category = section.getConfigurationSection(id);
+                    if (category != null && !ceCategories.containsKey(id)) {
+                        ceCategories.put(id, new CeCategory(category.getStringList("list")));
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void sortByCeCategories(List<CEBridge.RecipeData> recipes) {
+        Map<String, Integer> namespaceOrder = new HashMap<>();
+        Map<String, Integer> itemOrder = new HashMap<>();
+        int namespaceIndex = 0;
+        int itemIndex = 0;
+        for (CeCategory category : ceCategories.values()) {
+            for (String item : category.items) {
+                if (item == null || item.isBlank() || item.charAt(0) == 35) continue;
+                String normalized = normalizeId(item);
+                int separator = normalized.indexOf(':');
+                if (separator <= 0) continue;
+                namespaceOrder.putIfAbsent(normalized.substring(0, separator), namespaceIndex++);
+                itemOrder.putIfAbsent(normalized, itemIndex++);
+            }
+        }
+        recipes.sort(Comparator
+                .comparingInt((CEBridge.RecipeData recipe) -> isVanillaResult(recipe.resultId) ? 0 : 1)
+                .thenComparingInt(recipe -> namespaceOrder.getOrDefault(namespaceOf(recipe.resultId), Integer.MAX_VALUE))
+                .thenComparingInt(recipe -> itemOrder.getOrDefault(normalizeId(recipe.resultId), Integer.MAX_VALUE)));
+    }
+
+    private static boolean isVanillaResult(String itemId) {
+        return itemId != null && itemId.regionMatches(true, 0, "minecraft:", 0, 10);
+    }
+
+    private static String namespaceOf(String itemId) {
+        String normalized = normalizeId(itemId);
+        if (normalized == null) return "";
+        int separator = normalized.indexOf(':');
+        return separator > 0 ? normalized.substring(0, separator) : "";
+    }
+
+    private static String normalizeId(String id) {
+        if (id == null) return null;
+        return id.toLowerCase(Locale.ROOT);
+    }
+
+    private static final class CeCategory {
+        private final List<String> items;
+
+        private CeCategory(List<String> items) {
+            this.items = items == null ? List.of() : List.copyOf(items);
+        }
     }
 
     private Inventory createGUIInventory(UUID owner, String type, int size, String title) {
@@ -330,8 +403,9 @@ public class RecipeGUI {
         for (CEBridge.RecipeData r : deduped) {
             nameMap.put(r, toChineseName(r.resultId, locale));
         }
-        deduped.sort(Comparator.comparing(nameMap::get, CN_COLLATOR));
-        return deduped;
+       sortByCeCategories(deduped);
+        plugin.getRecipeOrderManager().apply(categoryId, deduped);
+       return deduped;
     }
 
     public void clearSearch(Player player) {
@@ -442,8 +516,9 @@ public class RecipeGUI {
         for (CEBridge.RecipeData r : deduped) {
             nameMap.put(r, toChineseName(r.resultId, locale));
         }
-        deduped.sort(Comparator.comparing(nameMap::get, CN_COLLATOR));
-        return deduped;
+       sortByCeCategories(deduped);
+        plugin.getRecipeOrderManager().apply(categoryId, deduped);
+       return deduped;
     }
 
     public void clearAdminSearch(Player player) {
@@ -463,6 +538,11 @@ public class RecipeGUI {
             player.sendMessage(config.getPluginPrefix() + " §a已显示 §f" + name + " §a的配方（普通玩家可见）");
         }
         return hidden;
+    }
+
+    public void moveRecipe(String categoryId, CEBridge.RecipeData recipe, int direction, List<CEBridge.RecipeData> current) {
+        if (categoryId == null || recipe == null) return;
+        plugin.getRecipeOrderManager().move(categoryId, recipe.resultId, direction, current);
     }
 
     // ===================== 新增配方 GUI（管理员）=====================

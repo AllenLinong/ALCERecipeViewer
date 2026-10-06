@@ -204,6 +204,7 @@ public class GUIListener implements Listener {
         Inventory closed = event.getInventory();
         if (!gui.isOurGUI(player.getUniqueId(), closed)) return;
         scheduleGUIItemCleanup(player, true);
+
         clickService.clearCooldowns(player.getUniqueId());
         if (!gui.isCurrentGUI(player.getUniqueId(), closed)) return;
 
@@ -229,6 +230,7 @@ public class GUIListener implements Listener {
         if (!gui.getGUIType(player.getUniqueId()).isEmpty()) {
             gui.removePlayer(player.getUniqueId());
             scheduleGUIItemCleanup(player, true);
+
         }
     }
 
@@ -238,6 +240,8 @@ public class GUIListener implements Listener {
         gui.discardPlayer(player.getUniqueId());
         clickService.clearCooldowns(player.getUniqueId());
         scheduleGUIItemCleanup(player, true);
+        plugin.getFoliaLib().getScheduler().runLater(task -> plugin.getUpdateChecker().notifyAdmin(player), 40);
+
     }
 
     @EventHandler
