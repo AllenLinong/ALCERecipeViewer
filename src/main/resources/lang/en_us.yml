@@ -168,7 +168,7 @@ menu:
   # Admin menu
   admin_main_title: "&8Admin - Recipe Manager"
   admin_list_title: "&8Admin - {category} ({page}/{total})"
-  # Order menu (/alcerecipes order)
+  # Order menu (/alcerecipes admin order)
   order_list_title: "&8Order - {category} ({page}/{total})"
   order_hint_title: "&6&l⚙ Adjust Recipe Order"
   order_hint_1: "&7Left-click item: &eMove up"
@@ -182,7 +182,7 @@ admin:
   toggle_hidden: "&cRecipe hidden"
   toggle_shown: "&aRecipe shown"
 
-# Order menu (/alcerecipes order, admin only)
+# Order menu (/alcerecipes admin order, admin only)
 order:
   main_title: "&8Order - Select Category"
   click_order: "&e▶ Click to adjust order"

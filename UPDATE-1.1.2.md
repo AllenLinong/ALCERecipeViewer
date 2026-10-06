@@ -1,18 +1,18 @@
 # 1.1.2 更新说明
 
-配方排序改为独立的排序菜单（`/alcerecipes order`），不再占用管理列表的 Shift 点击。
+配方排序改为独立的排序菜单（`/alcerecipes admin order`），不再占用管理列表的 Shift 点击。
 
-## 新指令：/alcerecipes order（管理员）
+## 新指令：/alcerecipes admin order（管理员）
 
 ```
-/alcerecipes order            打开排序分类选择（复用主菜单布局）
-/alcerecipes order <分类ID>   直接打开该分类的排序列表（支持 Tab 补全）
+/alcerecipes admin order            打开排序分类选择（复用主菜单布局）
+/alcerecipes admin order <分类ID>   直接打开该分类的排序列表（支持 Tab 补全）
 ```
 
 - 排序列表的内容与普通玩家看到的**完全一致**：已隐藏的配方不显示、多配方去重、CE 分类排序 + 自定义顺序，管理员所见即玩家所得。
 - **左键点击物品 = 上移一位，右键 = 下移一位**，调整即时保存到 `recipe_order.yml` 并同步到所有玩家菜单。
 - 每个物品的 lore 标注了当前位置与操作提示；菜单底部带说明按钮与翻页按钮。
-- 别名：`/alcerecipes sort`。
+- 同义写法：`/alcer admin order`、`/alcerecipes manage order`、`/alcerecipes admin sort`。
 
 ## 行为变化
 

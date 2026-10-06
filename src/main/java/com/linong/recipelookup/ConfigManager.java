@@ -268,7 +268,7 @@ public class ConfigManager {
         return v != null ? v : "§a已显示配方";
     }
 
-    // 排序菜单（/alcerecipes order）
+    // 排序菜单（/alcerecipes admin order）
     public String getOrderMainTitle() {
         String v = getLangString("order.main_title");
         return v != null ? v : "§8排序管理 - 选择分类";

@@ -288,7 +288,7 @@ public class RecipeGUI {
 
     /**
      * 排序管理主菜单：复用主菜单布局，分类数量与玩家看到的一致（未隐藏计数），
-     * 点击分类进入该分类的排序列表（/alcerecipes order）。
+     * 点击分类进入该分类的排序列表（/alcerecipes admin order）。
      */
     public void openOrderMainMenu(Player player) {
         MenuDef menu = menuConfig.getMainMenu();
@@ -344,7 +344,7 @@ public class RecipeGUI {
 
     /**
      * 排序列表：内容与普通玩家看到的完全一致（隐藏过滤 + 去重 + CE 分类排序 + 自定义顺序），
-     * 左键上移 / 右键下移，调整即时保存。仅管理员可通过 /alcerecipes order 打开。
+     * 左键上移 / 右键下移，调整即时保存。仅管理员可通过 /alcerecipes admin order 打开。
      */
     public void openOrderRecipeList(Player player, String categoryId, int page) {
         if (categoryId == null) {
@@ -1841,7 +1841,7 @@ public class RecipeGUI {
         }
         lore.add("");
         lore.add("§e▶ 点击切换显示/隐藏");
-        lore.add("§7调整顺序: §f/alcerecipes order");
+        lore.add("§7调整顺序: §f/alcerecipes admin order");
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setLore(lore);

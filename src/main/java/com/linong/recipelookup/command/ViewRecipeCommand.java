@@ -54,8 +54,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
             case "reload" -> handleReload(player);
             case "clear" -> handleClear(player);
             case "create", "new" -> handleCreate(player);
-            case "admin", "manage" -> handleAdmin(player);
-            case "order", "sort" -> handleOrder(player, args);
+            case "admin", "manage" -> handleAdmin(player, args);
             default -> sendHelp(player);
         }
         return true;
@@ -84,10 +83,18 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         gui.openRecipeCreatorType(player);
     }
 
-    private void handleAdmin(Player player) {
+    /** /alcerecipes admin - 管理主菜单；/alcerecipes admin order [分类] - 排序菜单 */
+    private void handleAdmin(Player player, String[] args) {
         if (!player.hasPermission("alcerecipeviewer.admin")) {
             player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoPermission());
             return;
+        }
+        if (args.length >= 2) {
+            String sub = args[1].toLowerCase();
+            if ("order".equals(sub) || "sort".equals(sub)) {
+                handleOrder(player, args.length >= 3 ? args[2] : null);
+                return;
+            }
         }
         if (plugin.getLoadedRecipes().isEmpty()) {
             player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoRecipes());
@@ -105,18 +112,14 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(config.getPluginPrefix() + " " + config.getCreatorCleared());
     }
 
-    /** /alcerecipes order [分类ID] — 打开排序菜单（内容与玩家看到的一致，左键上移/右键下移） */
-    private void handleOrder(Player player, String[] args) {
-        if (!player.hasPermission("alcerecipeviewer.admin")) {
-            player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoPermission());
-            return;
-        }
+    /** /alcerecipes admin order [分类ID] — 打开排序菜单（内容与玩家看到的一致，左键上移/右键下移） */
+    private void handleOrder(Player player, String categoryArg) {
         if (plugin.getLoadedRecipes().isEmpty()) {
             player.sendMessage(config.getPluginPrefix() + " " + config.getCmdNoRecipes());
             return;
         }
-        if (args.length >= 2) {
-            String category = args[1].toLowerCase();
+        if (categoryArg != null) {
+            String category = categoryArg.toLowerCase();
             if (!plugin.getLoadedRecipes().containsKey(category)) {
                 player.sendMessage(config.getPluginPrefix() + " " + config.getOrderNoCategory(category));
                 return;
@@ -135,7 +138,7 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§e  /alcerecipes create §7- 打开新增配方菜单（管理员）");
         if (player.hasPermission("alcerecipeviewer.admin")) {
             player.sendMessage("§e  /alcerecipes admin §7- 打开配方管理菜单（管理员）");
-            player.sendMessage("§e  /alcerecipes order [分类] §7- 打开排序菜单调整配方顺序（管理员）");
+            player.sendMessage("§e  /alcerecipes admin order [分类] §7- 打开排序菜单调整配方顺序（管理员）");
         }
     }
 
@@ -146,13 +149,22 @@ public class ViewRecipeCommand implements CommandExecutor, TabCompleter {
                                       @NotNull String[] args) {
         if (args.length == 1) {
             String prefix = args[0].toLowerCase();
-            return List.of("reload", "clear", "create", "admin", "manage", "order", "sort").stream()
+            return List.of("reload", "clear", "create", "admin", "manage").stream()
                     .filter(s -> s.startsWith(prefix)).sorted().toList();
         }
+        String sub = args[0].toLowerCase();
+        boolean adminCmd = "admin".equals(sub) || "manage".equals(sub);
+        if (!adminCmd) return List.of();
+
         if (args.length == 2) {
-            String sub = args[0].toLowerCase();
-            if (!("order".equals(sub) || "sort".equals(sub))) return List.of();
             String prefix = args[1].toLowerCase();
+            return List.of("order").stream()
+                    .filter(s -> s.startsWith(prefix)).toList();
+        }
+        if (args.length == 3) {
+            String subSub = args[1].toLowerCase();
+            if (!("order".equals(subSub) || "sort".equals(subSub))) return List.of();
+            String prefix = args[2].toLowerCase();
             return availableCategories().stream()
                     .filter(s -> s.startsWith(prefix)).sorted().toList();
         }

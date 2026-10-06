@@ -12,7 +12,7 @@ softdepend:
 commands:
   alcerecipes:
     description: 打开AL合成表查看器，按分类浏览合成配方
-    usage: /<command> [order|admin|create|reload|clear] [分类ID]
+    usage: /<command> [admin [order]] [create|reload|clear] [分类ID]
     aliases:
       - alcer
       - alcebook

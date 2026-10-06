@@ -3,7 +3,7 @@
 #
 # 配置版本 config_version: 3 —— 插件启动时自动升级旧版本配置：
 #   只补缺失的新键（连同注释），自定义过的键一律保留原样，旧文件备份为 menu.yml.bak
-#   v3 新增：排序管理菜单 order_list（/alcerecipes order）
+#   v3 新增：排序管理菜单 order_list（/alcerecipes admin order）
 #
 # 文字使用 {@key} 引用 lang 文件中的 menu 节点
 #
@@ -274,7 +274,7 @@ recipe_list:
       material: "BLACK_STAINED_GLASS_PANE"
       name: " "
 
-# ===== 排序管理列表（管理员，/alcerecipes order）=====
+# ===== 排序管理列表（管理员，/alcerecipes admin order）=====
 # 内容与普通玩家看到的列表完全一致（已隐藏的配方不显示）。
 # 左键点击配方物品 = 上移一位，右键 = 下移一位，调整即时保存到 recipe_order.yml。
 # 排序主菜单复用 main_menu 布局（标题不同），分类按钮点击进入本列表。

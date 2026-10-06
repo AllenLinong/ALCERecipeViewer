@@ -186,7 +186,7 @@ menu:
   # 管理员菜单
   admin_main_title: "&8管理员 - 配方管理"
   admin_list_title: "&8管理员 - {category} ({page}/{total})"
-  # 排序菜单（/alcerecipes order）
+  # 排序菜单（/alcerecipes admin order）
   order_list_title: "&8排序管理 - {category} ({page}/{total})"
   order_hint_title: "&6&l⚙ 调整配方顺序"
   order_hint_1: "&7左键点击物品: &e上移一位"
@@ -200,7 +200,7 @@ admin:
   toggle_hidden: "&c已隐藏配方"
   toggle_shown: "&a已显示配方"
 
-# 排序菜单（/alcerecipes order，仅管理员）
+# 排序菜单（/alcerecipes admin order，仅管理员）
 order:
   main_title: "&8排序管理 - 选择分类"
   click_order: "&e▶ 点击调整配方顺序"
