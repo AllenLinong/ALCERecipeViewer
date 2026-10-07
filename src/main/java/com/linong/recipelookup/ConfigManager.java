@@ -296,11 +296,11 @@ public class ConfigManager {
     }
     public String getOrderMoveJumpUp() {
         String v = getLangString("order.move_jump_up");
-        return v != null ? v : "§e⇧ Shift+左键: 输入前进格数";
+        return v != null ? v : "§e⇧↑ Shift+左键: 输入前进格数";
     }
     public String getOrderMoveJumpDown() {
         String v = getLangString("order.move_jump_down");
-        return v != null ? v : "§e⇧ Shift+右键: 输入后退格数";
+        return v != null ? v : "§e⇧↓ Shift+右键: 输入后退格数";
     }
     /** direction: -1 前进（上移），+1 后退（下移） */
     public String getOrderMovePrompt(int direction) {
